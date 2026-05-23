@@ -1,0 +1,2549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SECURE_HANDSHAKE_GATEWAY_V11</title>
+    <!-- ✅ Face API JS library for live face recognition -->
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        /* सारी CSS जस की तस है – कोई बदलाव नहीं */
+        /* ... [आपकी पूरी CSS यहाँ बिना किसी बदलाव के] ... */
+        :root {
+            --bg-color: #030102;
+            --panel-bg: rgba(10, 5, 9, 0.94);
+            --red-glow: #ff1e56;
+            --red-dim: #4a0918;
+            --green-glow: #00ff66;
+            --green-dim: #043618;
+            --blue-glow: #00e5ff;
+            --blue-dim: #00363e;
+            --orange-glow: #ff8c00;
+            --orange-dim: #4a2800;
+            --terminal-pink: #d81b60;
+            --terminal-pink-dim: #4f0a25;
+            --text-muted: #8c5364;
+            --window-top: #10060c;
+            --transition-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+            
+            /* Screenshot specific color tokens */
+            --cyber-bg: #010813;
+            --cyber-panel: rgba(5, 11, 22, 0.96);
+            --cyber-border: #14b8a6;
+            --cyber-glow: #0d9488;
+            --cyber-text: #2dd4bf;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            scrollbar-width: thin;
+            scrollbar-color: var(--red-dim) transparent;
+        }
+
+        *::-webkit-scrollbar {
+            width: 6px;
+        }
+        *::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        *::-webkit-scrollbar-thumb {
+            background-color: var(--red-dim);
+            border-radius: 3px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: 700;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+            overflow-y: auto;
+            padding: 10px;
+            user-select: none;
+            position: relative;
+            perspective: 1200px;
+        }
+
+        #matrixCanvas {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -2; opacity: 0.35; transition: opacity 1s;
+            pointer-events: none;
+        }
+
+        .cyber-grid {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+            background-image: 
+                linear-gradient(rgba(255, 30, 86, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 30, 86, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            pointer-events: none;
+        }
+
+        .crt-scanlines {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 9999;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+            opacity: 0.8;
+        }
+
+        .window-wrapper {
+            width: 100%;
+            max-width: 900px;
+            transform-style: preserve-3d;
+            transition: transform 0.5s var(--transition-smooth);
+            will-change: transform;
+        }
+
+        .window-wrapper.terminal-large-mode {
+            max-width: 1150px;
+            transform: none !important;
+        }
+
+        .window {
+            width: 100%;
+            background: var(--panel-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            z-index: 1;
+            border: 2px solid var(--red-dim);
+            box-shadow: 0 15px 45px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 30, 86, 0.05);
+            transition: all 0.6s var(--transition-smooth);
+            backdrop-filter: blur(12px);
+            transform-style: preserve-3d; 
+        }
+
+        .window::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 12px; padding: 2px;
+            background: linear-gradient(90deg, transparent 20%, var(--red-glow) 50%, transparent 80%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none;
+            animation: borderTracer 4s linear infinite;
+        }
+
+        @keyframes borderTracer {
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
+        }
+
+        .window-header { 
+            background: var(--window-top); 
+            padding: 14px 20px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 1px solid var(--red-dim); 
+            transition: all 0.5s; 
+        }
+        .window-controls { display: flex; gap: 8px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; transition: transform 0.2s; }
+        .dot:hover { transform: scale(1.2); }
+        .dot-red { background: #ff5f56; }
+        .dot-yellow { background: #ffbd2e; }
+        .dot-blue { background: #27c93f; }
+        .window-title { color: var(--text-muted); font-size: 11px; letter-spacing: 2.5px; font-weight: 900; text-transform: uppercase; text-align: center; flex-grow: 1; margin: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .crypto-tag { background: rgba(255, 30, 86, 0.08); border: 1px solid var(--red-dim); color: var(--red-glow); padding: 3px 10px; font-size: 10px; border-radius: 4px; letter-spacing: 1.5px; transition: all 0.5s; font-weight: 900; }
+
+        .status-bar { display: flex; justify-content: space-between; align-items: center; padding: 12px 25px; font-size: 11px; letter-spacing: 1px; border-bottom: 1px solid rgba(92, 13, 33, 0.35); flex-wrap: wrap; gap: 10px; transition: all 0.5s; font-weight: 800; }
+        .status-left { display: flex; align-items: center; gap: 10px; color: var(--red-glow); font-weight: 900; transition: color 0.5s; }
+        .pulse-dot { width: 10px; height: 10px; background: var(--red-glow); border-radius: 50%; transition: background-color 0.5s; }
+        .scanning-active .pulse-dot { animation: pulse-red 1.2s infinite; }
+        .status-mid { color: #8ab4f8; font-weight: 900; }
+        .status-right { color: var(--text-muted); font-weight: 800; }
+
+        .window-body { padding: 30px; display: flex; flex-direction: column; align-items: center; gap: 30px; transform-style: preserve-3d; transition: all 0.5s; }
+
+        .screen {
+            display: none;
+            width: 100%;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+            transform-style: preserve-3d;
+        }
+
+        .screen.active {
+            display: flex;
+            animation: screenFadeIn 0.4s var(--transition-smooth) forwards;
+        }
+
+        @keyframes screenFadeIn {
+            from { opacity: 0; transform: translateZ(-30px); }
+            to { opacity: 1; transform: translateZ(0); }
+        }
+
+        .interactive-row { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 20px; transform-style: preserve-3d; }
+        
+        @media (max-width: 768px) {
+            .interactive-row {
+                flex-direction: column;
+                gap: 30px;
+            }
+            .node-column {
+                width: 100% !important;
+                flex-direction: row !important;
+                justify-content: center;
+            }
+            .server-node {
+                width: 48% !important;
+            }
+        }
+
+        .node-column { display: flex; flex-direction: column; gap: 15px; width: 200px; transform: translateZ(30px); }
+        .server-node { background: rgba(18, 8, 16, 0.7); border: 1.5px solid var(--red-dim); border-radius: 8px; padding: 12px 15px; display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 800; transition: all 0.5s var(--transition-smooth); position: relative; overflow: hidden; }
+        .server-node::after {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+            transition: 0.5s;
+        }
+        .server-node:hover::after { left: 100%; }
+        .node-header { display: flex; justify-content: space-between; align-items: center; color: #e5dde1; font-weight: 900; }
+        .node-indicator { width: 8px; height: 8px; background: var(--red-glow); border-radius: 50%; box-shadow: 0 0 8px var(--red-glow); transition: background 0.5s, box-shadow 0.5s; }
+        .node-status { color: var(--red-glow); font-size: 10px; letter-spacing: 1px; font-weight: 900; transition: color 0.5s; }
+
+        .server-node.bypassing { border-color: #8ab4f8; background: rgba(18, 30, 52, 0.5); animation: nodeFlicker 0.4s infinite alternate; }
+        .server-node.bypassing .node-indicator { background: #8ab4f8; box-shadow: 0 0 10px #8ab4f8; }
+        .server-node.bypassing .node-status { color: #8ab4f8; }
+        .server-node.bypassed { border-color: var(--green-dim); background: rgba(4, 34, 16, 0.5); }
+        .server-node.bypassed .node-indicator { background: var(--green-glow); box-shadow: 0 0 10px var(--green-glow); }
+        .server-node.bypassed .node-status { color: var(--green-glow); }
+
+        @keyframes nodeFlicker { 0% { opacity: 0.7; transform: scale(0.98); } 100% { opacity: 1; transform: scale(1); } }
+
+        .hud-container { position: relative; width: 220px; height: 220px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); transform: translateZ(60px); transform-style: preserve-3d; }
+        .hud-container:hover:not(.disabled) { transform: translateZ(80px) scale(1.08); }
+        .hud-container:active:not(.disabled) { transform: translateZ(40px) scale(0.95); }
+        .hud-container.disabled { cursor: default; }
+
+        .hud-layer { position: absolute; border-radius: 50%; border: 2px dashed transparent; transition: all 0.6s var(--transition-smooth); }
+        .layer-1 { width: 220px; height: 220px; border: 2px dashed rgba(255, 30, 86, 0.25); transform: translateZ(10px); }
+        .layer-2 { width: 185px; height: 185px; border: 2.5px solid var(--red-dim); border-left-color: var(--red-glow); border-right-color: var(--red-glow); transform: rotate(45deg) translateZ(20px); }
+        .layer-3 { width: 145px; height: 145px; border: 1px dashed rgba(255, 30, 86, 0.15); transform: translateZ(30px); }
+        .scanner-sweep { position: absolute; width: 135px; height: 135px; border-radius: 50%; background: conic-gradient(from 0deg, rgba(255, 30, 86, 0.45) 0deg, rgba(255, 30, 86, 0) 180deg); opacity: 0; transition: opacity 0.4s; z-index: 2; pointer-events: none; transform: translateZ(35px); }
+        
+        .hud-center { position: absolute; width: 125px; height: 125px; background: rgba(6, 3, 5, 0.98); border-radius: 50%; border: 2px solid var(--red-dim); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 3; text-align: center; padding: 12px; box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.95); transition: all 0.6s var(--transition-smooth); transform: translateZ(45px); }
+
+        .biometric-icon { width: 44px; height: 44px; fill: none; stroke: var(--red-glow); stroke-width: 1.5; margin-bottom: 8px; transition: all 0.6s var(--transition-smooth); filter: drop-shadow(0 0 5px var(--red-dim)); }
+        .hud-status-text { font-size: 10px; color: var(--red-glow); letter-spacing: 1.5px; font-weight: 900; margin-bottom: 3px; }
+        .hud-sub-text { font-size: 9px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; font-weight: 800; }
+
+        .scanning-active .layer-1 { border-color: var(--red-glow); box-shadow: 0 0 20px rgba(255, 30, 86, 0.3); animation: spin-clockwise 8s linear infinite; }
+        .scanning-active .layer-2 { border-color: var(--red-glow); border-top-color: transparent; border-bottom-color: transparent; animation: spin-counter 5s linear infinite; }
+        .scanning-active .layer-3 { border-color: rgba(255, 30, 86, 0.5); animation: spin-clockwise 3s linear infinite; }
+        .scanning-active .scanner-sweep { opacity: 1; animation: spin-clockwise 1.5s linear infinite; }
+        .scanning-active .hud-status-text { color: #ffffff; text-shadow: 0 0 8px var(--red-glow); }
+
+        .success-state .window { border-color: var(--green-dim); box-shadow: 0 0 40px rgba(0, 255, 102, 0.2); }
+        .success-state .window::before { background: linear-gradient(90deg, transparent 20%, var(--green-glow) 50%, transparent 80%); }
+        .success-state .crypto-tag { border-color: var(--green-glow); color: var(--green-glow); background: rgba(0, 255, 102, 0.05); }
+        .success-state .status-left { color: var(--green-glow); }
+        .success-state .pulse-dot { background-color: var(--green-glow); animation: pulse-green 1.2s infinite; }
+        .success-state .layer-1 { border-color: var(--green-glow); box-shadow: 0 0 25px rgba(0, 255, 102, 0.25); transform: rotate(180deg) translateZ(10px); }
+        .success-state .layer-2 { border-color: var(--green-glow); border-top-color: transparent; border-bottom-color: transparent; transform: rotate(-90deg) translateZ(20px); }
+        .success-state .layer-3 { border-color: rgba(0, 255, 102, 0.3); transform: translateZ(30px); }
+        .success-state .scanner-sweep { opacity: 0; }
+        .success-state .hud-center { border-color: var(--green-glow); transform: translateZ(45px); }
+        .success-state .biometric-icon { stroke: var(--green-glow); filter: drop-shadow(0 0 10px var(--green-glow)); }
+        .success-state .hud-status-text { color: var(--green-glow); text-shadow: 0 0 10px rgba(0, 255, 102, 0.5); }
+
+        .system-action-btn { display: none; background: rgba(0, 255, 102, 0.1); border: 1.5px solid var(--green-glow); color: var(--green-glow); padding: 14px 30px; font-family: 'Courier New', Courier, monospace; font-size: 11px; font-weight: 900; letter-spacing: 2px; border-radius: 8px; cursor: pointer; transition: all 0.3s var(--transition-smooth); box-shadow: 0 0 15px rgba(0, 255, 102, 0.15); animation: pulse-button 1.5s infinite alternate; }
+        .system-action-btn:hover { background: var(--green-glow); color: #000; box-shadow: 0 0 25px rgba(0, 255, 102, 0.5); transform: translateY(-2px); }
+        
+        .blue-btn { background: rgba(0, 229, 255, 0.1); border-color: var(--blue-glow); color: var(--blue-glow); box-shadow: 0 0 15px rgba(0, 229, 255, 0.15); }
+        .blue-btn:hover { background: var(--blue-glow); color: #000; box-shadow: 0 0 25px rgba(0, 229, 255, 0.5); }
+
+        .pink-btn { background: rgba(216, 27, 96, 0.1); border-color: var(--terminal-pink); color: var(--terminal-pink); box-shadow: 0 0 15px rgba(216, 27, 96, 0.15); }
+        .pink-btn:hover { background: var(--terminal-pink); color: #fff; box-shadow: 0 0 25px rgba(216, 27, 96, 0.6); }
+
+        @keyframes pulse-button { 0% { transform: scale(1); } 100% { transform: scale(1.03); } }
+
+        .intranet-layout { display: flex; width: 100%; gap: 20px; transform-style: preserve-3d; flex-wrap: wrap; }
+        .directory-pane { flex: 1; min-width: 250px; background: rgba(0, 229, 255, 0.02); border: 1.5px solid var(--blue-dim); border-radius: 8px; padding: 20px; height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; transform: translateZ(20px); transition: all 0.5s; }
+        .directory-pane h4 { font-size: 11px; color: var(--blue-glow); letter-spacing: 1.5px; margin-bottom: 5px; border-bottom: 1px solid var(--blue-dim); padding-bottom: 8px; text-transform: uppercase; font-weight: 900; }
+        .dir-item { display: flex; align-items: center; gap: 10px; font-size: 11px; color: #d6cbd1; font-weight: 800; padding: 8px 12px; border-radius: 6px; cursor: pointer; transition: background 0.25s, color 0.25s; border: 1px solid transparent; }
+        .dir-item:hover { background: rgba(0, 229, 255, 0.08); color: var(--blue-glow); }
+        .dir-item.active { background: rgba(0, 229, 255, 0.12); border: 1px solid rgba(0, 229, 255, 0.25); color: var(--blue-glow); }
+        
+        .console-pane { flex: 1.2; min-width: 280px; display: flex; flex-direction: column; gap: 15px; transform: translateZ(30px); }
+        .file-viewer { background: rgba(2, 4, 8, 0.85); border: 1.5px solid var(--blue-dim); border-radius: 8px; padding: 15px; height: 110px; font-size: 11px; color: #b0e8f0; font-weight: 800; overflow-y: auto; line-height: 1.5; font-family: monospace; }
+        
+        .credential-vault { background: rgba(0, 229, 255, 0.04); border: 1.5px solid var(--blue-dim); border-radius: 8px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; position: relative;}
+        .decryption-row { display: flex; justify-content: space-between; font-size: 11px; align-items: center; font-weight: 900; }
+        .progress-track { width: 100%; height: 8px; background: rgba(0, 229, 255, 0.12); border-radius: 4px; overflow: hidden; position: relative; }
+        .progress-fill { width: 0%; height: 100%; background: var(--blue-glow); box-shadow: 0 0 10px var(--blue-glow); transition: width 0.3s; }
+
+        #proceedToMasterBtn { display: none; width: 100%; text-align: center; justify-content: center; }
+
+        .master-layout { display: flex; width: 100%; gap: 20px; transform-style: preserve-3d; flex-wrap: wrap; }
+        .control-panel { flex: 1; min-width: 260px; background: rgba(255, 140, 0, 0.02); border: 1.5px solid var(--orange-dim); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; transform: translateZ(25px); transition: all 0.3s; min-height: 250px; }
+        .control-panel:hover { background: rgba(255, 140, 0, 0.06); box-shadow: 0 0 25px rgba(255, 140, 0, 0.15); }
+        .control-panel h3 { font-size: 12px; color: var(--orange-glow); letter-spacing: 2px; text-align: center; border-bottom: 1px solid var(--orange-dim); padding-bottom: 12px; width: 100%; text-transform: uppercase; font-weight: 900; }
+        
+        .extract-data-view { width: 100%; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; margin: 15px 0; }
+        .data-packet { width: 100%; height: 6px; background: rgba(0, 255, 102, 0.1); border-radius: 3px; overflow: hidden; }
+        .data-packet-inner { width: 0%; height: 100%; background: var(--green-glow); box-shadow: 0 0 8px var(--green-glow); transition: width 0.2s; }
+        .extract-status { font-size: 10px; color: #d6cbd1; text-align: center; font-weight: 900; }
+        
+        .wipe-warning-view { width: 100%; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; text-align: center; margin: 15px 0; }
+        .warning-icon { font-size: 26px; animation: pulse-text 0.8s infinite alternate; }
+        .warning-text { font-size: 11px; color: var(--red-glow); font-weight: 900; }
+
+        .master-btn { width: 100%; padding: 12px; font-family: 'Courier New', Courier, monospace; font-size: 11px; font-weight: 900; letter-spacing: 2px; border-radius: 6px; cursor: pointer; transition: all 0.3s; border: 1.5px solid; text-transform: uppercase; }
+        .btn-extract { background: rgba(0, 255, 102, 0.1); border-color: var(--green-glow); color: var(--green-glow); box-shadow: 0 0 15px rgba(0, 255, 102, 0.1); }
+        .btn-extract:hover:not(:disabled) { background: var(--green-glow); color: #000; box-shadow: 0 0 25px rgba(0, 255, 102, 0.4); }
+        .btn-wipe { background: rgba(255, 30, 86, 0.1); border-color: var(--red-glow); color: var(--red-glow); box-shadow: 0 0 15px rgba(255, 30, 86, 0.1); }
+        .btn-wipe:hover:not(:disabled) { background: var(--red-glow); color: #fff; box-shadow: 0 0 25px rgba(255, 30, 86, 0.4); }
+
+        #proceedToTerminalBtn { display: none; margin-top: 15px; width: 100%; text-align: center; justify-content: center; }
+
+        .terminal-override-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            transform-style: flat;
+        }
+
+        .screen4-topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 1.5px;
+            padding: 5px 10px;
+            margin-bottom: 5px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .topbar-left { display: flex; align-items: center; gap: 10px; color: #ffffff; }
+        .topbar-left-dot { width: 8px; height: 8px; background-color: var(--terminal-pink); border-radius: 50%; box-shadow: 0 0 8px var(--terminal-pink); animation: pulse-pink 1.5s infinite; }
+        .topbar-mid { color: #00e5ff; }
+        .topbar-right { color: var(--terminal-pink); }
+
+        .screen4-shell-log {
+            width: 100%;
+            height: 560px;
+            background: #050205;
+            border: 1px solid rgba(216, 27, 96, 0.35);
+            border-radius: 10px;
+            padding: 22px;
+            font-size: 13px;
+            line-height: 1.6;
+            overflow-y: auto;
+            color: #d6cbd1;
+            font-weight: 800;
+            box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.95), 0 0 15px rgba(216, 27, 96, 0.15);
+            transition: border-color 0.5s, box-shadow 0.5s;
+        }
+
+        @media (max-height: 800px) {
+            .screen4-shell-log {
+                height: 380px;
+            }
+        }
+
+        .terminal-input-bar {
+            background: #080307;
+            border: 1px solid rgba(216, 27, 96, 0.35);
+            border-radius: 10px;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .terminal-prompt-wrapper { display: flex; align-items: center; gap: 10px; flex: 1; }
+        .prompt-kali { color: #b339a0; font-weight: 900; font-size: 13px; white-space: nowrap; }
+        .terminal-field { background: transparent; border: none; outline: none; color: #ffffff; font-family: 'Courier New', Courier, monospace; font-size: 13px; font-weight: 800; flex: 1; caret-color: var(--terminal-pink); }
+        
+        .auto-run-btn {
+            background: rgba(216, 27, 96, 0.1);
+            border: 1.5px solid var(--terminal-pink);
+            color: var(--terminal-pink);
+            font-weight: 900;
+            font-size: 11px;
+            font-family: 'Courier New', Courier, monospace;
+            padding: 6px 14px;
+            border-radius: 5px;
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+            box-shadow: 0 0 10px rgba(216, 27, 96, 0.2);
+        }
+        .auto-run-btn:hover {
+            background: var(--terminal-pink);
+            color: #ffffff;
+            box-shadow: 0 0 15px rgba(216, 27, 96, 0.6);
+        }
+
+        .shell-line { display: flex; gap: 12px; margin-bottom: 8px; align-items: flex-start; font-weight: 800; }
+        .shell-timestamp { font-weight: 900; white-space: nowrap; }
+
+        .override-required-banner {
+            border-left: 4px solid var(--terminal-pink);
+            background: rgba(122, 12, 50, 0.15);
+            border-radius: 4px;
+            padding: 14px 20px;
+            margin: 5px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-weight: 800;
+        }
+        .banner-title { color: #ff1e56; font-size: 11px; font-weight: 900; letter-spacing: 1.5px; }
+        .banner-text { font-size: 11px; color: #e2d9dd; }
+        .banner-highlight { background: rgba(0, 229, 255, 0.12); color: #00e5ff; border: 1px dashed rgba(0, 229, 255, 0.35); padding: 1px 6px; border-radius: 3px; font-weight: 900; }
+
+        .color-spoofing { color: #51ff0d; }
+        .color-ready { color: #00e5ff; font-weight: 900; }
+        .color-injecting { color: #ffe600; }
+        .color-decrypting { color: #ff00ea; }
+        .color-cracking { color: #ff5500; }
+        .color-success-tag { background: rgba(0, 255, 102, 0.1); border: 1px solid var(--green-glow); color: var(--green-glow); padding: 1px 6px; border-radius: 4px; font-weight: 900; display: inline-block; }
+        .color-override { color: #ff2a6d; font-weight: 900; }
+
+        .terminal-active-mode .window {
+            border: 2px solid var(--terminal-pink) !important;
+            box-shadow: 0 10px 40px rgba(216, 27, 96, 0.35) !important;
+            border-radius: 12px !important;
+            transform: none !important;
+        }
+        .terminal-active-mode .window::before { display: none; }
+        .terminal-active-mode .window-body { padding: 20px !important; transform: none !important; }
+        .terminal-active-mode .chart-container,
+        .terminal-active-mode .terminal-box { display: none !important; }
+
+        .megaboot-container {
+            display: none;
+            width: 100%;
+            height: 600px;
+            background: var(--cyber-bg);
+            border: 2px solid var(--cyber-border);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 0 30px rgba(13, 148, 136, 0.25);
+            font-family: 'Courier New', Courier, monospace;
+            position: relative;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        .megaboot-container.active {
+            display: flex;
+            animation: screenFadeIn 0.5s ease-out forwards;
+        }
+
+        .megaboot-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1.5px solid rgba(20, 184, 166, 0.3);
+            padding-bottom: 10px;
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            color: var(--cyber-text);
+            font-weight: 900;
+        }
+        .boot-rate { color: #0df766; }
+        .boot-buffer { color: #ff8c00; }
+
+        .megaboot-body {
+            display: flex;
+            flex: 1;
+            width: 100%;
+            gap: 20px;
+            min-height: 0;
+        }
+
+        .compile-log-stream {
+            flex: 1.3;
+            background: rgba(0, 4, 10, 0.85);
+            border: 1px solid rgba(20, 184, 166, 0.2);
+            border-radius: 6px;
+            padding: 15px;
+            font-size: 12px;
+            line-height: 1.5;
+            overflow-y: auto;
+            color: var(--cyber-text);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .compiler-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .row-tag { color: #51ff0d; font-weight: 900; white-space: nowrap; }
+        .row-desc { color: #d6cbd1; word-break: break-all; }
+        .row-status { color: #0df766; font-weight: 900; white-space: nowrap; }
+
+        .compile-system-status {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+        }
+
+        .glowing-circular-widget {
+            position: relative;
+            width: 250px;
+            height: 250px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(13, 148, 136, 0.05) 0%, transparent 70%);
+        }
+
+        .circular-ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            transition: all 0.5s;
+        }
+
+        .ring-outer {
+            width: 240px;
+            height: 240px;
+            border-top-color: var(--cyber-border);
+            border-bottom-color: var(--cyber-border);
+            animation: spin-clockwise 6s linear infinite;
+        }
+
+        .ring-inner {
+            width: 210px;
+            height: 210px;
+            border-left-color: rgba(13, 148, 136, 0.4);
+            border-right-color: rgba(13, 148, 136, 0.4);
+            border-style: dashed;
+            animation: spin-counter 4s linear infinite;
+        }
+
+        .circular-inner-content {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+            z-index: 5;
+        }
+
+        .compiling-icon {
+            font-size: 26px;
+            color: var(--cyber-text);
+            margin-bottom: 8px;
+            animation: spin-clockwise 2.5s linear infinite;
+        }
+
+        .compiling-title {
+            font-size: 13px;
+            letter-spacing: 2.5px;
+            color: #ffffff;
+            font-weight: 900;
+            text-shadow: 0 0 10px var(--cyber-glow);
+            margin-bottom: 4px;
+        }
+
+        .compiling-subtext {
+            font-size: 9px;
+            color: #d6cbd1;
+            letter-spacing: 1px;
+            line-height: 1.4;
+            max-width: 160px;
+            margin-bottom: 10px;
+        }
+
+        .compiling-percentage {
+            font-size: 20px;
+            font-weight: 900;
+            color: var(--cyber-text);
+            letter-spacing: 1.5px;
+            text-shadow: 0 0 15px rgba(45, 212, 191, 0.75);
+        }
+
+        .telemetry-container {
+            width: 100%;
+            background: rgba(0, 4, 10, 0.9);
+            border: 1.5px solid rgba(20, 184, 166, 0.25);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .telemetry-label {
+            font-size: 9px;
+            letter-spacing: 1px;
+            color: var(--cyber-text);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .telemetry-dot {
+            width: 6px;
+            height: 6px;
+            background: #0df766;
+            border-radius: 50%;
+            box-shadow: 0 0 6px #0df766;
+        }
+        #telemetryCanvas {
+            width: 100%;
+            height: 60px;
+            opacity: 0.85;
+        }
+
+        .log-line { display: flex; gap: 15px; opacity: 0; transform: translateY(10px); font-weight: 800; animation: slideUpFade 0.5s var(--transition-smooth) forwards; }
+        .log-timestamp { color: #9be969; font-weight: 900; white-space: nowrap; }
+        .log-message { color: #d6cbd1; }
+        .log-message-highlight { color: var(--green-glow); font-weight: 900; }
+        .log-message-warning { color: var(--orange-glow); font-weight: 900; }
+        .log-message-critical { color: var(--red-glow); font-weight: 900; animation: pulse-text 0.5s infinite alternate; }
+
+        .transitioning { animation: glitchEffect 0.3s infinite; }
+
+        @keyframes glitchEffect { 0% { transform: translate(3px, 1px) skew(2deg); filter: hue-rotate(90deg); } 50% { transform: translate(-2px, 3px) skew(-2deg); filter: hue-rotate(180deg); } 100% { transform: translate(1px, -2px) skew(0deg); filter: hue-rotate(0deg); } }
+        @keyframes spin-clockwise { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes spin-counter { 0% { transform: rotate(360deg); } 100% { transform: rotate(0deg); } }
+        @keyframes pulse-red { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 30, 86, 0.6); } 70% { box-shadow: 0 0 0 8px rgba(255, 30, 86, 0); } }
+        @keyframes pulse-green { 0%, 100% { box-shadow: 0 0 0 0 rgba(0, 255, 102, 0.6); } 70% { box-shadow: 0 0 0 8px rgba(0, 255, 102, 0); } }
+        @keyframes pulse-pink { 0%, 100% { box-shadow: 0 0 0 0 rgba(216, 27, 96, 0.7); } 70% { box-shadow: 0 0 0 8px rgba(216, 27, 96, 0); } }
+        @keyframes slideUpFade { to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-text { 0% { opacity: 0.4; } 100% { opacity: 1; } }
+
+        .secure-connection-wrapper {
+            width: 100%;
+            max-width: 650px;
+            background: rgba(1, 8, 19, 0.95);
+            border: 1.5px solid var(--cyber-border);
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 0 35px rgba(20, 184, 166, 0.25);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transform-style: preserve-3d;
+        }
+
+        .secure-connection-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            font-family: monospace;
+            border-bottom: 1.5px solid rgba(20, 184, 166, 0.25);
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+            letter-spacing: 1.5px;
+        }
+
+        .coords-group {
+            display: flex;
+            gap: 15px;
+            font-weight: 900;
+        }
+        .coord-lat { color: var(--cyber-text); }
+        .coord-lat span { color: #0df766; }
+        .coord-lon { color: var(--terminal-pink); }
+        .coord-lon span { color: #ff1e56; }
+        .raw-sys-tag { color: var(--cyber-text); font-weight: 900; }
+
+        .telemetry-check-container {
+            position: relative;
+            width: 130px;
+            height: 130px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .check-ring-outer {
+            position: absolute;
+            width: 110px;
+            height: 110px;
+            border: 3px solid transparent;
+            border-top-color: var(--cyber-border);
+            border-bottom-color: var(--cyber-border);
+            border-radius: 50%;
+            animation: spin-clockwise 2.5s linear infinite;
+        }
+
+        .check-ring-inner {
+            position: absolute;
+            width: 90px;
+            height: 90px;
+            border: 1.5px dashed rgba(20, 184, 166, 0.45);
+            border-radius: 50%;
+            animation: spin-counter 3.5s linear infinite;
+        }
+
+        .check-center-sphere {
+            position: absolute;
+            width: 70px;
+            height: 70px;
+            background: rgba(13, 148, 136, 0.15);
+            border: 1.5px solid var(--cyber-border);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 5;
+            box-shadow: inset 0 0 15px rgba(20, 184, 166, 0.3), 0 0 20px rgba(20, 184, 166, 0.2);
+        }
+
+        .check-symbol-svg {
+            width: 32px;
+            height: 32px;
+            stroke: #0df766;
+            stroke-width: 4;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            filter: drop-shadow(0 0 8px rgba(13, 247, 102, 0.8));
+        }
+
+        .conn-established-title {
+            font-size: 19px;
+            font-weight: 900;
+            letter-spacing: 3px;
+            color: #ffffff;
+            margin-bottom: 8px;
+            text-shadow: 0 0 15px var(--cyber-glow);
+            text-align: center;
+            text-transform: uppercase;
+            min-height: 24px;
+        }
+
+        .conn-established-desc {
+            font-size: 11px;
+            color: #8c5364;
+            text-align: center;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            max-width: 440px;
+            letter-spacing: 1px;
+        }
+
+        .tactical-transceivers-panel {
+            width: 100%;
+            background: rgba(0, 4, 10, 0.8);
+            border: 1.2px solid rgba(20, 184, 166, 0.3);
+            border-radius: 6px;
+            padding: 18px;
+            margin-bottom: 30px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .tactical-panel-title {
+            font-size: 11px;
+            color: #ff8c00;
+            letter-spacing: 1.5px;
+            font-weight: 900;
+            border-bottom: 1px dashed rgba(255, 140, 0, 0.2);
+            padding-bottom: 8px;
+            margin-bottom: 4px;
+        }
+
+        .tactical-metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .metric-label {
+            color: #d6cbd1;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value-green {
+            color: #0df766;
+            font-weight: 900;
+            text-shadow: 0 0 8px rgba(13, 247, 102, 0.4);
+        }
+
+        .metric-value-blue {
+            color: #00e5ff;
+            font-weight: 900;
+            text-shadow: 0 0 8px rgba(0, 229, 255, 0.4);
+        }
+
+        .metric-value-pink {
+            color: #ff1e56;
+            font-weight: 900;
+            text-shadow: 0 0 8px rgba(255, 30, 86, 0.4);
+        }
+
+        .secure-link-btn {
+            background: rgba(20, 184, 166, 0.1);
+            border: 2px solid var(--cyber-border);
+            color: #ffffff;
+            padding: 12px 35px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 2px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            box-shadow: 0 0 15px rgba(20, 184, 166, 0.4), inset 0 0 15px rgba(20, 184, 166, 0.2);
+            text-shadow: 0 0 8px rgba(20, 184, 166, 0.8);
+            animation: neonPulseTeal 1.8s infinite alternate ease-in-out;
+        }
+
+        @keyframes neonPulseTeal {
+            0% {
+                box-shadow: 0 0 12px rgba(20, 184, 166, 0.35), inset 0 0 8px rgba(20, 184, 166, 0.15);
+                text-shadow: 0 0 6px rgba(20, 184, 166, 0.65);
+                border-color: rgba(20, 184, 166, 0.6);
+            }
+            100% {
+                box-shadow: 0 0 28px rgba(20, 184, 166, 0.85), inset 0 0 18px rgba(20, 184, 166, 0.45);
+                text-shadow: 0 0 14px rgba(20, 184, 166, 1);
+                border-color: rgba(20, 184, 166, 1);
+            }
+        }
+
+        .secure-link-btn:hover {
+            background: var(--cyber-border);
+            color: #010813;
+            box-shadow: 0 0 35px rgba(20, 184, 166, 1), inset 0 0 10px rgba(255, 255, 255, 0.5);
+            text-shadow: none;
+            transform: translateY(-1.5px);
+        }
+
+        /* ========================================================================= */
+        /* ADVANCED SCREEN 7 & 8 STYLES (Ultra-Modern 3D Hacker Vibe)                */
+        /* ========================================================================= */
+        
+        .reading-data-wrapper, .system-activated-wrapper {
+            width: 100%;
+            max-width: 750px;
+            min-height: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, rgba(1, 15, 25, 0.95) 0%, rgba(1, 8, 19, 0.98) 100%);
+            border: 1.5px solid rgba(13, 247, 102, 0.3);
+            border-radius: 12px;
+            box-shadow: inset 0 0 40px rgba(13, 247, 102, 0.05), 0 0 50px rgba(13, 247, 102, 0.15);
+            box-sizing: border-box;
+            position: relative;
+            overflow: hidden;
+            /* 3D Holographic Tilt */
+            transform-style: preserve-3d;
+            transform: perspective(1000px) rotateX(5deg);
+            transition: all 0.5s ease-out;
+        }
+
+        .reading-data-wrapper::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(0deg, transparent 0%, rgba(13, 247, 102, 0.05) 50%, transparent 100%);
+            animation: holoScan 4s linear infinite; pointer-events: none;
+        }
+
+        @keyframes holoScan { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+
+        /* Screen 7: Reading Data */
+        .rd-title {
+            color: #0df766;
+            font-size: 42px;
+            font-weight: 900;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px rgba(13, 247, 102, 0.8), 0 0 20px rgba(13, 247, 102, 0.4);
+            font-family: 'Arial Black', Impact, sans-serif; 
+            transform: scaleX(1.15) translateZ(30px);
+            position: relative;
+        }
+
+        /* Glitch text effect */
+        .rd-title::before, .rd-title::after {
+            content: 'READING DATA..'; position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.8;
+        }
+        .rd-title::before { left: 2px; text-shadow: -2px 0 #ff1e56; animation: glitch-anim-1 2s infinite linear alternate-reverse; }
+        .rd-title::after { left: -2px; text-shadow: 2px 0 #00e5ff; animation: glitch-anim-2 3s infinite linear alternate-reverse; }
+        
+        @keyframes glitch-anim-1 { 0% { clip-path: inset(20% 0 80% 0); } 20% { clip-path: inset(60% 0 10% 0); } 40% { clip-path: inset(40% 0 50% 0); } 60% { clip-path: inset(80% 0 5% 0); } 80% { clip-path: inset(10% 0 70% 0); } 100% { clip-path: inset(30% 0 20% 0); } }
+        @keyframes glitch-anim-2 { 0% { clip-path: inset(10% 0 60% 0); } 20% { clip-path: inset(30% 0 20% 0); } 40% { clip-path: inset(70% 0 10% 0); } 60% { clip-path: inset(20% 0 50% 0); } 80% { clip-path: inset(50% 0 30% 0); } 100% { clip-path: inset(5% 0 80% 0); } }
+
+        .rd-info-row {
+            display: flex; justify-content: space-between; width: 420px; margin-bottom: 8px; transform: translateZ(20px);
+        }
+
+        .rd-subtitle { color: #ffffff; font-size: 11px; font-weight: 900; letter-spacing: 2px; font-family: 'Courier New', monospace; text-transform: uppercase; }
+        .rd-speed { color: #0df766; font-size: 11px; font-weight: 900; letter-spacing: 1px; font-family: 'Courier New', monospace; }
+
+        .rd-progress-track {
+            width: 420px; height: 22px; border: 2px solid rgba(255, 255, 255, 0.7); padding: 3px; background: rgba(0, 0, 0, 0.5); transform: translateZ(25px); position: relative; box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+        }
+
+        .rd-progress-fill {
+            width: 0%; height: 100%; background-color: #ffffff; box-shadow: 0 0 15px rgba(255, 255, 255, 0.8), 0 0 30px rgba(13, 247, 102, 0.6); transition: width 0.1s linear; position: relative; overflow: hidden;
+        }
+        
+        .rd-progress-fill::after {
+            content: ''; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(90deg, transparent, rgba(13, 247, 102, 0.8), transparent);
+            animation: stripeFlow 1s linear infinite;
+        }
+
+        @keyframes stripeFlow { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+        .rd-hex-stream {
+            margin-top: 15px; font-size: 10px; color: #14b8a6; font-family: monospace; letter-spacing: 2px; opacity: 0.5; width: 420px; text-align: center; transform: translateZ(10px);
+        }
+
+        /* Screen 8: System Activated */
+        .sa-layout {
+            display: flex; align-items: center; justify-content: center; gap: 40px; transform: translateZ(40px); width: 100%;
+        }
+
+        .sa-bracket {
+            color: rgba(13, 247, 102, 0.4); font-size: 80px; font-weight: 100; font-family: monospace; text-shadow: 0 0 20px rgba(13, 247, 102, 0.5); animation: bracket-pulse 2s infinite alternate; transform: scaleY(1.2);
+            user-select: none;
+        }
+
+        @keyframes bracket-pulse { 0% { opacity: 0.4; transform: scaleY(1.2) translateX(5px); } 100% { opacity: 1; text-shadow: 0 0 30px #0df766; transform: scaleY(1.2) translateX(-5px); } }
+        
+        .sa-bracket.sa-left { animation-name: bracket-pulse-left; }
+
+        @keyframes bracket-pulse-left { 0% { opacity: 0.4; transform: scaleY(1.2) translateX(-5px); } 100% { opacity: 1; text-shadow: 0 0 30px #0df766; transform: scaleY(1.2) translateX(5px); } }
+
+        .sa-center-content { display: flex; flex-direction: column; align-items: center; flex-grow: 0; }
+
+        .sa-title {
+            color: #0df766; font-size: 45px; font-weight: 900; letter-spacing: 5px; text-transform: uppercase; margin: 20px 0;
+            text-shadow: 0 0 20px rgba(13, 247, 102, 0.9), 0 0 40px rgba(13, 247, 102, 0.5);
+            font-family: 'Arial Black', Impact, sans-serif; transform: scaleX(1.15); animation: sa-flash 1.2s infinite alternate, sa-glitch-shake 3s infinite;
+            white-space: nowrap;
+        }
+
+        @keyframes sa-flash {
+            0% { opacity: 0.85; text-shadow: 0 0 15px rgba(13, 247, 102, 0.6); }
+            100% { opacity: 1; text-shadow: 0 0 30px rgba(13, 247, 102, 1), 0 0 60px rgba(13, 247, 102, 0.8), 0 0 90px rgba(255, 255, 255, 0.4); }
+        }
+
+        @keyframes sa-glitch-shake {
+            0%, 95%, 100% { transform: scaleX(1.15) translate(0, 0); }
+            96% { transform: scaleX(1.15) translate(3px, -2px); }
+            98% { transform: scaleX(1.15) translate(-3px, 2px); }
+        }
+
+        .sa-decor-line {
+            width: 400px; height: 12px; background: repeating-linear-gradient(90deg, #0df766 0, #0df766 18px, transparent 18px, transparent 24px);
+            -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 15%, black 85%, transparent 100%);
+            opacity: 0.9; box-shadow: 0 0 15px rgba(13, 247, 102, 0.6); animation: line-slide 20s linear infinite; background-size: 48px 100%;
+        }
+        .sa-decor-line.reverse { animation-direction: reverse; }
+
+        @keyframes line-slide { 0% { background-position: 0 0; } 100% { background-position: 400px 0; } }
+
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+            .rd-title, .sa-title { font-size: 28px; letter-spacing: 2px; }
+            .rd-info-row, .rd-progress-track, .sa-decor-line, .rd-hex-stream { width: 90%; }
+            .sa-bracket { font-size: 50px; }
+            .sa-layout { gap: 10px; }
+        }
+
+        /* ========================================================================= */
+        /* NEW STYLES: SCREEN 9 (ADMIN SETUP) & SCREEN 10/11 (IDENTITY CENTER)       */
+        /* ========================================================================= */
+        
+        .admin-setup-wrapper {
+            width: 100%; max-width: 500px; padding: 40px;
+            background: rgba(1, 15, 25, 0.95); border: 2px solid #0df766; border-radius: 12px;
+            box-shadow: inset 0 0 20px rgba(13, 247, 102, 0.1), 0 0 30px rgba(13, 247, 102, 0.2);
+            display: flex; flex-direction: column; align-items: center; gap: 20px;
+        }
+
+        .setup-title { color: #0df766; font-size: 22px; font-weight: 900; letter-spacing: 4px; text-shadow: 0 0 10px rgba(13,247,102,0.5); }
+        .cyber-input { width: 100%; background: #000; border: 1px solid rgba(13,247,102,0.4); color: #0df766; padding: 12px; font-family: monospace; font-size: 14px; outline: none; transition: 0.3s; }
+        .cyber-input:focus { border-color: #0df766; box-shadow: 0 0 10px rgba(13,247,102,0.3); }
+        .cyber-input::placeholder { color: rgba(13,247,102,0.4); }
+
+        .upload-container { width: 100%; height: 120px; border: 2px dashed rgba(13,247,102,0.5); display: flex; justify-content: center; align-items: center; position: relative; cursor: pointer; overflow: hidden; }
+        .upload-container:hover { border-color: #0df766; background: rgba(13,247,102,0.05); }
+        .upload-text { color: rgba(13,247,102,0.8); font-size: 12px; letter-spacing: 2px; }
+        #photoUpload { position: absolute; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; }
+        #previewThumb { position: absolute; width: 100%; height: 100%; object-fit: cover; filter: sepia(1) hue-rotate(70deg) saturate(400%) contrast(1.2) brightness(0.6); display: none; }
+        .scan-overlay-text { position: absolute; z-index: 15; color: #0df766; font-weight: 900; letter-spacing: 3px; background: rgba(0,0,0,0.8); padding: 5px 15px; border: 1px solid #0df766; display: none; animation: pulse-text 0.5s infinite alternate; }
+
+        .iac-container { width: 100%; max-width: 600px; display: flex; flex-direction: column; align-items: center; gap: 25px; transform-style: preserve-3d; }
+        .iac-header { text-align: center; display: flex; flex-direction: column; gap: 8px; }
+        .iac-subtitle { color: #14b8a6; font-size: 9px; letter-spacing: 3px; font-weight: 800; }
+        .iac-title { color: #0df766; font-size: 24px; font-weight: 900; letter-spacing: 4px; text-shadow: 0 0 15px rgba(13,247,102,0.4); }
+
+        .iac-photo-frame {
+            width: 280px; height: 280px; border: 1.5px solid #0df766; position: relative; display: flex; justify-content: center; align-items: center; background: rgba(0,0,0,0.4); overflow: hidden; transition: all 0.5s; box-shadow: inset 0 0 30px rgba(13,247,102,0.1);
+        }
+        
+        .iac-photo-frame::before {
+            content: ''; position: absolute; top: 10px; left: 10px; width: 20px; height: 20px; border-top: 2px solid #0df766; border-left: 2px solid #0df766; opacity: 0.5;
+        }
+        .iac-photo-frame::after {
+            content: ''; position: absolute; bottom: 10px; right: 10px; width: 20px; height: 20px; border-bottom: 2px solid #0df766; border-right: 2px solid #0df766; opacity: 0.5;
+        }
+
+        .iac-avatar { width: 80px; height: 80px; stroke: #0df766; fill: none; stroke-width: 2; opacity: 0.6; }
+        
+        .iac-photo-img {
+            position: absolute; width: 100%; height: 100%; object-fit: cover; display: none;
+            /* Magical filter to match Image 2 exactly (Hacker green monitor effect) */
+            filter: sepia(1) hue-rotate(70deg) saturate(500%) contrast(1.5) brightness(0.7);
+        }
+
+        .iac-photo-overlay { position: absolute; bottom: 10px; font-size: 9px; color: rgba(13,247,102,0.6); text-align: center; letter-spacing: 2px; }
+        
+        .iac-scanline {
+            position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: #0df766; box-shadow: 0 0 15px 5px rgba(13,247,102,0.6); display: none; z-index: 5;
+        }
+        @keyframes scan-laser { 0% { top: 0; opacity: 0.8; } 50% { top: 100%; opacity: 1; } 100% { top: 0; opacity: 0.8; } }
+
+        .iac-btn-row { display: flex; gap: 15px; }
+        .iac-btn { background: transparent; border: 1.5px solid; padding: 10px 20px; font-family: monospace; font-size: 11px; font-weight: 900; letter-spacing: 1.5px; border-radius: 4px; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 8px; }
+        .btn-live { border-color: #0df766; color: #0df766; background: rgba(13,247,102,0.05); }
+        .btn-live:hover { background: rgba(13,247,102,0.2); box-shadow: 0 0 15px rgba(13,247,102,0.3); }
+        .btn-token { border-color: #555; color: #888; cursor: not-allowed; }
+        
+        .iac-data-panel {
+            width: 100%; max-width: 450px; border: 1px solid #0df766; background: rgba(0, 5, 2, 0.9); padding: 15px 20px; position: relative; box-shadow: inset 0 0 15px rgba(13,247,102,0.05); min-height: 90px; display: flex; flex-direction: column; justify-content: center;
+        }
+        .iac-panel-top { display: flex; justify-content: space-between; font-size: 8px; color: rgba(13,247,102,0.5); letter-spacing: 1px; margin-bottom: 15px; position: absolute; top: 8px; left: 10px; width: calc(100% - 20px); }
+        
+        .iac-panel-content { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 10px; }
+        .iac-fp-icon { width: 30px; height: 30px; fill: #d4af37; animation: pulse-text 1.5s infinite alternate; }
+        .iac-await-text { color: #d4af37; font-size: 10px; letter-spacing: 2px; font-weight: 800; }
+
+        .iac-verified-content { display: none; flex-direction: column; align-items: center; gap: 6px; text-align: center; margin-top: 10px; }
+        .iac-type-admin { color: #ffffff; font-size: 14px; font-weight: 900; letter-spacing: 2px; text-shadow: 0 0 8px rgba(255,255,255,0.5); }
+        .iac-type-sub { color: #0df766; font-size: 9px; letter-spacing: 1.5px; opacity: 0.8; }
+
+        .iac-bottom-action { margin-top: 15px; }
+        .iac-lock-btn { background: rgba(10,10,10,0.8); border: 1px solid #333; color: #555; padding: 12px 30px; font-family: monospace; font-size: 11px; letter-spacing: 2px; border-radius: 4px; pointer-events: none; }
+        .iac-access-btn { display: none; background: rgba(13,247,102,0.1); border: 1.5px solid #0df766; color: #0df766; padding: 12px 30px; font-family: monospace; font-size: 11px; font-weight: 900; letter-spacing: 2px; border-radius: 4px; cursor: pointer; box-shadow: 0 0 15px rgba(13,247,102,0.2); animation: neonPulseTeal 1.5s infinite alternate; }
+        .iac-access-btn:hover { background: #0df766; color: #000; box-shadow: 0 0 30px rgba(13,247,102,0.6); }
+
+        @keyframes framePopup {
+            0% { transform: scale(1); box-shadow: inset 0 0 30px rgba(13,247,102,0.1); }
+            50% { transform: scale(1.15); box-shadow: 0 0 50px rgba(13, 247, 102, 0.8); border-color: #fff; }
+            100% { transform: scale(1.05); box-shadow: 0 0 25px rgba(13, 247, 102, 0.5); }
+        }
+        .frame-popped { animation: framePopup 0.5s ease-out forwards; }
+        
+        /* --- MODIFIED SCREEN 9 & 10/11 STYLES --- */
+        .admin-setup-wrapper {
+            width: 100%; max-width: 650px; padding: 50px;
+            background: rgba(1, 15, 25, 0.95); border: none; border-radius: 12px;
+            box-shadow: inset 0 0 20px rgba(13, 247, 102, 0.1), 0 0 30px rgba(13, 247, 102, 0.2);
+            display: flex; flex-direction: column; align-items: center; gap: 20px;
+        }
+        .upload-container { 
+            width: 100%; height: 250px; border: 2px dashed rgba(13,247,102,0.8); 
+            display: flex; justify-content: center; align-items: center; position: relative; cursor: pointer; overflow: hidden; 
+        }
+        .upload-container::after {
+            content: ''; position: absolute; top:0; left:0; width:100%; height:100%;
+            background: linear-gradient(0deg, transparent, rgba(13,247,102,0.15), transparent);
+            animation: upload-scan 3s linear infinite; pointer-events: none;
+        }
+        @keyframes upload-scan { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+        
+        .iac-container { width: 100%; max-width: 800px; display: flex; flex-direction: column; align-items: center; gap: 25px; transform-style: preserve-3d; }
+        .iac-photo-frame {
+            width: 360px; height: 360px; border: 1.5px solid #0df766; position: relative; display: flex; justify-content: center; align-items: center; background: rgba(0,0,0,0.4); overflow: hidden; transition: all 0.5s; box-shadow: inset 0 0 30px rgba(13,247,102,0.1);
+        }
+        
+        .warning-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 30, 86, 0.15); z-index: 99999;
+            display: none; justify-content: center; align-items: center;
+            backdrop-filter: blur(8px);
+        }
+        .warning-box {
+            background: rgba(10, 0, 5, 0.95); border: 2px solid #ff1e56;
+            box-shadow: 0 0 50px rgba(255, 30, 86, 0.6); border-radius: 8px;
+            padding: 40px; text-align: center; color: #ff1e56;
+            font-family: 'Courier New', monospace; animation: sa-glitch-shake 0.3s infinite;
+        }
+        .warning-title { font-size: 32px; font-weight: 900; letter-spacing: 5px; margin-bottom: 10px; }
+        .warning-desc { font-size: 14px; color: #fff; letter-spacing: 2px; }
+        
+        #iacLiveVideo { position: absolute; width: 100%; height: 100%; object-fit: cover; filter: sepia(1) hue-rotate(70deg) saturate(500%) contrast(1.5) brightness(0.7); display: none; }
+    </style>
+</head>
+<body>
+    <audio id="initAudio" src="initialising.mp3" preload="auto"></audio>
+    
+    <div class="warning-overlay" id="warningOverlay">
+        <div class="warning-box">
+            <div class="warning-title">WARNING: PROTOCOL VIOLATION</div>
+            <div class="warning-desc">ADMIN CREDENTIALS & BIOMETRIC DATA MISSING</div>
+        </div>
+    </div>
+
+    <div class="crt-scanlines"></div>
+    <div class="cyber-grid"></div>
+    <canvas id="matrixCanvas"></canvas>
+
+    <div class="window-wrapper" id="windowWrapper">
+        <div class="window" id="gatewayWindow">
+            
+            <div class="window-header" id="standardWindowHeader">
+                <div class="window-controls">
+                    <div class="dot dot-red" onclick="triggerSystemReset()"></div>
+                    <div class="dot dot-yellow"></div>
+                    <div class="dot dot-blue"></div>
+                </div>
+                <div class="window-title" id="mainHeaderTitle">SECURE_HANDSHAKE_GATEWAY.sh</div>
+                <div class="crypto-tag" id="mainHeaderTag">AES_256_GCM</div>
+            </div>
+
+            <div class="status-bar" id="standardStatusBar">
+                <div class="status-left">
+                    <div class="pulse-dot" id="pulseDotIndicator"></div>
+                    <span id="systemMode">SYSTEM READY // IDLE FEED</span>
+                </div>
+                <div class="status-mid" id="nodeLabel">NODE: PIYUSH-CORE-01</div>
+                <div class="status-right" id="liveClock">00:00:00 UTC</div>
+            </div>
+
+            <div class="window-body">
+                
+                <!-- SCREEN 1: BIOMETRIC SCANNER -->
+                <div class="screen active" id="screenGateway">
+                    <div class="interactive-row">
+                        <div class="node-column">
+                            <div class="server-node" id="node1">
+                                <div class="node-header"><span>NODE_PROXY_01</span><div class="node-indicator"></div></div>
+                                <div class="node-status" id="nodeStatus1">LOCKED</div>
+                            </div>
+                            <div class="server-node" id="node2">
+                                <div class="node-header"><span>NODE_RELAY_02</span><div class="node-indicator"></div></div>
+                                <div class="node-status" id="nodeStatus2">LOCKED</div>
+                            </div>
+                        </div>
+
+                        <div class="hud-container" id="hudTrigger">
+                            <div class="hud-layer layer-1"></div>
+                            <div class="hud-layer layer-2"></div>
+                            <div class="hud-layer layer-3"></div>
+                            <div class="scanner-sweep"></div>
+                            
+                            <div class="hud-center">
+                                <svg class="biometric-icon" viewBox="0 0 24 24">
+                                    <path d="M12 2a10 10 0 0 0-7.3 3.1M12 5a7 7 0 0 0-5 2M12 8a4 4 0 0 0-2.5 1" stroke-linecap="round"/>
+                                    <path d="M12 11a1 1 0 0 0-1 1v4a1 1 0 0 0 2 0v-4a1 1 0 0 0-1-1z" fill="currentColor"/>
+                                    <path d="M9 13v2M15 12v3M7 15a5 5 0 0 0 10 0v-1" stroke-linecap="round"/>
+                                    <path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" stroke-linecap="round"/>
+                                </svg>
+                                <div class="hud-status-text" id="hudStatus">TAP TO SCAN</div>
+                                <div class="hud-sub-text" id="hudSubText">[ STABLE INTEL ]</div>
+                            </div>
+                        </div>
+
+                        <div class="node-column">
+                            <div class="server-node" id="node3">
+                                <div class="node-header"><span>DNS_BYPASS_03</span><div class="node-indicator"></div></div>
+                                <div class="node-status" id="nodeStatus3">LOCKED</div>
+                            </div>
+                            <div class="server-node" id="node4">
+                                <div class="node-header"><span>CORE_STACK_04</span><div class="node-indicator"></div></div>
+                                <div class="node-status" id="nodeStatus4">LOCKED</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="system-action-btn" id="nextScreenBtn">ENTER ACCESS CONSOLE</button>
+                </div>
+
+                <!-- SCREEN 2: INTRANET & SYSTEM EXPLORER -->
+                <div class="screen" id="screenCoreExplorer">
+                    <div class="intranet-layout">
+                        <div class="directory-pane">
+                            <h4>SECURE_SYSTEM_ROOT</h4>
+                            <div class="dir-item active" onclick="loadVirtualFile('sys_log', this)">📁 sys_security_manifest.cfg</div>
+                            <div class="dir-item" onclick="loadVirtualFile('core_users', this)">📁 secure_clearance_users.db</div>
+                            <div class="dir-item" onclick="loadVirtualFile('override_seq', this)">📁 payload_injection_map.json</div>
+                        </div>
+
+                        <div class="console-pane">
+                            <div class="file-viewer" id="fileViewerConsole">
+                                Initializing Directory Stream... Select a manifest map to read database fields.
+                            </div>
+
+                            <div class="credential-vault">
+                                <div class="decryption-row">
+                                    <span style="color: var(--blue-glow); font-weight: bold;">ROOT_DECRYPTER_VAULT</span>
+                                    <span id="decryptionProgressText">STATUS: 0%</span>
+                                </div>
+                                <div class="progress-track">
+                                    <div class="progress-fill" id="decryptionProgressBar"></div>
+                                </div>
+                                <div style="font-size: 10px; color: #88afb5; text-align: center; margin-bottom: 5px;" id="liveDecryptionLabel">
+                                    KEY: STANDBY [AWAITING STREAM]
+                                </div>
+                                <button class="system-action-btn blue-btn" id="proceedToMasterBtn">PROCEED TO MASTER CONTROL</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SCREEN 3: MASTER CONTROL EXTRACTION -->
+                <div class="screen" id="screenMasterControl">
+                    <div class="master-layout">
+                        <div class="control-panel">
+                            <h3>[ DATA EXTRACTION ]</h3>
+                            <div class="extract-data-view">
+                                <div class="extract-status" id="extractStatusText">IDLE - AWAITING COMMAND</div>
+                                <div class="data-packet"><div class="data-packet-inner" id="extractProg1"></div></div>
+                                <div class="data-packet"><div class="data-packet-inner" id="extractProg2"></div></div>
+                                <div class="data-packet"><div class="data-packet-inner" id="extractProg3"></div></div>
+                            </div>
+                            <button class="master-btn btn-extract" id="btnExtract" onclick="startExtraction()">INITIATE DOWNLOAD</button>
+                        </div>
+
+                        <div class="control-panel" style="border-color: var(--red-dim); background: rgba(255, 30, 86, 0.03);">
+                            <h3 style="color: var(--red-glow); border-bottom-color: var(--red-dim);">[ SYSTEM OVERRIDE ]</h3>
+                            <div class="wipe-warning-view">
+                                <div class="warning-icon">⚠️</div>
+                                <div class="warning-text">PROTOCOL: SCORCHED EARTH</div>
+                                <div style="font-size:9px; color:var(--text-muted);">Permanently destroy all nodes and erase logs. Action cannot be undone.</div>
+                            </div>
+                            <button class="master-btn btn-wipe" id="btnWipe" onclick="startWipe()">WIPE ALL NODES</button>
+                        </div>
+                    </div>
+                    <button class="system-action-btn pink-btn" id="proceedToTerminalBtn">INITIALIZE COMMAND SHELL (SCREEN 4)</button>
+                </div>
+
+                <!-- SCREEN 4: KALI OVERRIDE SHELL -->
+                <div class="screen" id="screenTerminalOverride">
+                    <div class="terminal-override-container" id="terminalMainInterface">
+                        
+                        <div class="screen4-topbar">
+                            <div class="topbar-left">
+                                <span class="topbar-left-dot"></span>
+                                <span>DEEP INTRUSION // ALGORITHMIC FEED</span>
+                            </div>
+                            <div class="topbar-mid">NODE: PIYUSH-CORE-01</div>
+                            <div class="topbar-right" id="s4Clock">14:14:35 UTC</div>
+                        </div>
+
+                        <div class="screen4-shell-log" id="screen4Console"></div>
+
+                        <div class="override-required-banner">
+                            <span class="banner-title">OVERRIDE REQUIRED</span>
+                            <span class="banner-text">Type <span class="banner-highlight">hypercore ui</span> inside the console below or click <span class="banner-highlight">AUTO RUN</span> to launch compiling systems.</span>
+                        </div>
+
+                        <div class="terminal-input-bar">
+                            <div class="terminal-prompt-wrapper">
+                                <span class="prompt-kali">root@kali:~#</span>
+                                <input type="text" class="terminal-field" id="shellInputField" placeholder="Enter override key..." autocomplete="off">
+                            </div>
+                            <button class="auto-run-btn" onclick="triggerMegaBootProcess()">AUTO RUN</button>
+                        </div>
+                    </div>
+
+                    <!-- SCREEN 5: MEGA BOOT STREAM -->
+                    <div class="megaboot-container" id="megaBootProcessView">
+                        <div class="megaboot-header">
+                            <div>● MEGA BOOT DEPLOY STREAM ACTIVE</div>
+                            <div class="boot-rate">STREAM_RATE: 2.4GBPS</div>
+                            <div class="boot-buffer">BUFFER_SIZE: 128MB</div>
+                        </div>
+                        
+                        <div class="megaboot-body">
+                            <div class="compile-log-stream" id="compilingRegistryConsole"></div>
+                            
+                            <div class="compile-system-status">
+                                <div class="glowing-circular-widget">
+                                    <div class="circular-ring ring-outer"></div>
+                                    <div class="circular-ring ring-inner"></div>
+                                    <div class="circular-inner-content">
+                                        <div class="compiling-icon">🌀</div>
+                                        <div class="compiling-title">COMPILING SYSTEMS</div>
+                                        <div class="compiling-subtext">Procedural memory segments binding. Please standby.</div>
+                                        <div class="compiling-percentage" id="compilingPercentageValue">0% COMPLETE</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="telemetry-container">
+                                    <div class="telemetry-label">
+                                        <span class="telemetry-dot"></span>
+                                        <span>MEM_ALLOC TELEMETRY</span>
+                                    </div>
+                                    <canvas id="telemetryCanvas"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SCREEN 6: SECURE CONNECTION ESTABLISHED -->
+                <div class="screen" id="screenSecureConnection">
+                    <div class="secure-connection-wrapper">
+                        
+                        <div class="secure-connection-header">
+                            <div class="coords-group">
+                                <div class="coord-lat">LAT: <span>23.0211° N</span></div>
+                                <div class="coord-lon">LON: <span>72.5689° E</span></div>
+                            </div>
+                            <div class="raw-sys-tag">RAW-SYS-CONNECT</div>
+                        </div>
+
+                        <div class="telemetry-check-container">
+                            <div class="check-ring-outer"></div>
+                            <div class="check-ring-inner"></div>
+                            <div class="check-center-sphere">
+                                <svg class="check-symbol-svg" viewBox="0 0 24 24">
+                                    <path d="M20 6L9 17L4 12" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div class="conn-established-title" id="connEstablishedTitle"></div>
+                        <div class="conn-established-desc">Secure link tunnel online. Final data packets are being received.</div>
+
+                        <div class="tactical-transceivers-panel">
+                            <div class="tactical-panel-title"># STABILIZING TACTICAL TRANSCEIVERS ...</div>
+                            
+                            <div class="tactical-metric-row">
+                                <span class="metric-label">&gt; ENVELOPE PROTOCOL:</span>
+                                <span class="metric-value-green">AES-256-GCM READY</span>
+                            </div>
+
+                            <div class="tactical-metric-row">
+                                <span class="metric-label">&gt; BYPASS ROUTE TUNNEL:</span>
+                                <span class="metric-value-blue">SECURE PORT 9898</span>
+                            </div>
+
+                            <div class="tactical-metric-row">
+                                <span class="metric-label">&gt; SIGNAL STRENGTH STABILITY:</span>
+                                <span class="metric-value-green">95.5% (EXCELLENT)</span>
+                            </div>
+
+                            <div class="tactical-metric-row">
+                                <span class="metric-label">&gt; PACKETS DECODED MATRIX:</span>
+                                <span class="metric-value-pink">128/128 SYNCHRONIZED</span>
+                            </div>
+                        </div>
+
+                        <button class="secure-link-btn" onclick="triggerSystemReset()">Secure Link Active</button>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- ADVANCED SCREEN 7: READING DATA            -->
+                <!-- ========================================== -->
+                <div class="screen" id="screenReadingData">
+                    <div class="reading-data-wrapper">
+                        <h1 class="rd-title">READING DATA..</h1>
+                        <div class="rd-info-row">
+                            <div class="rd-subtitle">LOADING PAYLOAD...</div>
+                            <div class="rd-speed" id="rdSpeedCounter">0.00 GB/s</div>
+                        </div>
+                        <div class="rd-progress-track">
+                            <div class="rd-progress-fill" id="rdProgressFill"></div>
+                        </div>
+                        <div class="rd-hex-stream" id="rdHexStream">0x00F8 0x1A2B 0xFF40 0x8C92</div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- ADVANCED SCREEN 8: SYSTEM ACTIVATED        -->
+                <!-- ========================================== -->
+                <div class="screen" id="screenSystemActivated">
+                    <div class="system-activated-wrapper">
+                        <div class="sa-layout">
+                            <div class="sa-bracket sa-left">[</div>
+                            <div class="sa-center-content">
+                                <div class="sa-decor-line"></div>
+                                <h1 class="sa-title">SYSTEM ACTIVATED</h1>
+                                <div class="sa-decor-line reverse"></div>
+                            </div>
+                            <div class="sa-bracket sa-right">]</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- NEW SCREEN 9: ADMIN SETUP                  -->
+                <!-- ========================================== -->
+                <div class="screen" id="screenAdminSetup">
+                    <div class="admin-setup-wrapper">
+                        <div class="setup-title">SYSTEM REGISTRATION</div>
+                        <input type="text" id="adminNameInput" placeholder="ENTER SYSTEM ADMIN NAME" class="cyber-input" autocomplete="off">
+                        <input type="password" id="adminPassInput" placeholder="ENTER SECURE PASSWORD" class="cyber-input" autocomplete="off">
+                        
+                        <div class="upload-container" onclick="document.getElementById('photoUpload').click()">
+                            <img id="previewThumb">
+                            <div class="scan-overlay-text" id="scanOverlayText">INITIALISING SCAN...</div>
+                            <input type="file" id="photoUpload" accept="image/*" style="display:none;" onchange="previewUpload(event)">
+                            <div class="upload-text" id="uploadInstructionText">CLICK TO UPLOAD PHOTO</div>
+                        </div>
+
+                        <button class="system-action-btn" style="display:block; margin-top:10px;" onclick="submitAdmin()">REGISTER & INITIALIZE</button>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- NEW SCREEN 10/11: IDENTITY ANALYSIS CENTER -->
+                <!-- ========================================== -->
+                <div class="screen" id="screenIdentityCenter">
+                    <div class="iac-container">
+                        
+                        <div class="iac-header">
+                            <div class="iac-subtitle">ADMINISTRATIVE PROTOCOL</div>
+                            <div class="iac-title">IDENTITY ANALYSIS CENTER</div>
+                        </div>
+
+                        <div class="iac-photo-frame" id="iacPhotoFrame">
+                            <!-- Default Avatar -->
+                            <svg class="iac-avatar" id="iacAvatar" viewBox="0 0 24 24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                            </svg>
+                            <!-- User Uploaded Image (Green Filtered) -->
+                            <img id="iacPhotoImg" class="iac-photo-img">
+                            
+                            <!-- Live Camera Feed -->
+                            <video id="iacLiveVideo" autoplay playsinline></video>
+
+                            <!-- Overlay Texts -->
+                            <div class="iac-photo-overlay" id="iacPhotoOverlay">
+                                <div>FOCUS: AWAITING SOURCE</div>
+                                <div>DIST: CALCULATING</div>
+                            </div>
+                            
+                            <!-- Scanner Line -->
+                            <div class="iac-scanline" id="iacScanline"></div>
+                        </div>
+
+                        <div class="iac-btn-row">
+                            <button class="iac-btn btn-live" id="btnScanFace" onclick="startFaceScan()">
+                                📸 <span id="btnScanLabel">SCAN FACE (LIVE)</span>
+                            </button>
+                            <input type="file" id="tokenUpload" accept="image/*" style="display:none;" onchange="verifyImportedToken(event)">
+                            <button class="iac-btn btn-token" id="btnImportToken" onclick="document.getElementById('tokenUpload').click()" style="cursor:pointer; border-color:#14b8a6; color:#14b8a6;">
+                                🔑 <span id="btnTokenLabel">IMPORT TOKEN / KEY</span>
+                            </button>
+                        </div>
+
+                        <div class="iac-data-panel" id="iacDataPanel">
+                            <div class="iac-panel-top">
+                                <span id="panelSecId">SEC-ID_0*00A</span>
+                                <span id="panelClassId">CLASS_0-9</span>
+                            </div>
+                            
+                            <!-- Awaiting State (Screen 10) -->
+                            <div class="iac-panel-content" id="iacPanelAwaiting">
+                                <svg class="iac-fp-icon" viewBox="0 0 24 24">
+                                    <path d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.47-5.57 1.41-.24.13-.54.04-.68-.2-.13-.24-.04-.55.2-.68C7.82 2.52 9.86 2 12.01 2c2.13 0 3.99.47 6.03 1.52.25.13.34.43.21.67-.09.18-.26.28-.44.28zM3.5 9.72c-.1 0-.2-.03-.29-.09-.23-.16-.28-.47-.12-.7.99-1.4 2.25-2.5 3.75-3.27C9.98 4.04 14 4.03 17.15 5.65c1.5.77 2.76 1.86 3.75 3.25.16.22.11.54-.12.7-.23.16-.54.11-.7-.12-.89-1.24-2.01-2.2-3.35-2.89-2.81-1.43-6.4-1.43-9.45.11-1.34.68-2.46 1.64-3.35 2.89-.13.18-.32.28-.51.28z" stroke="currentColor" fill="currentColor"/>
+                                </svg>
+                                <div class="iac-await-text">AWAITING DATABASE MATRIX MATCH ...</div>
+                            </div>
+
+                            <!-- Verified State (Screen 11 - Typewriter will run here) -->
+                            <div class="iac-verified-content" id="iacPanelVerified">
+                                <div class="iac-type-admin" id="typeAdminName"></div>
+                                <div class="iac-type-sub" id="typeAdminRole"></div>
+                                <div class="iac-type-sub" id="typeAdminDiv"></div>
+                            </div>
+                        </div>
+
+                        <div class="iac-bottom-action">
+                            <button class="iac-lock-btn" id="btnAwaitingLock">AWAITING VERIFICATION 🔒</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- NEW SCREEN 12: MASTER COMMAND CENTER       -->
+                <!-- ========================================== -->
+                <div class="screen" id="screenFinalMaster">
+                    <div style="text-align:center; color:#ff1e56;">
+                        <h1 style="font-size: 50px; text-shadow: 0 0 20px #ff1e56; font-family: 'Arial Black', Impact, sans-serif;">MASTER COMMAND CENTER</h1>
+                        <p style="font-size: 14px; letter-spacing: 5px; margin-top:20px; color:#fff; font-weight: 900;">KEMENTERIAN RAW CYBER SECURITY DIVISION INDIA</p>
+                        <div class="sa-decor-line" style="margin-top:40px; width: 100%; background: repeating-linear-gradient(90deg, #ff1e56 0, #ff1e56 18px, transparent 18px, transparent 24px); box-shadow: 0 0 15px rgba(255, 30, 86, 0.6);"></div>
+                        <p style="margin-top: 30px; font-size: 24px; color: #ff1e56; font-weight: 900; letter-spacing: 3px; animation: pulse-text 1s infinite alternate;">ACCESS GRANTED // FULL SYSTEM OVERRIDE</p>
+                    </div>
+                </div>
+
+                <div class="chart-container" id="waveformWidget"><canvas id="waveformCanvas"></canvas></div>
+                <div class="terminal-box" id="terminalLog"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- AUTO TRANSITION FLAG ---
+        let autoTransitionInProgress = false;
+
+        // ✅ NEW global variables for image & face recognition
+        let uploadedPhotoHash = null;            // SHA-256 hash for import token
+        let registeredFaceDescriptor = null;    // Face descriptor for live camera
+        let faceApiModelsLoaded = false;
+
+        // --- 3D PERSPECTIVE ENGINE ---
+        const wrapper = document.getElementById('windowWrapper');
+        let isScreen4Active = false;
+
+        function applyTilt(x, y) {
+            if (isScreen4Active) {
+                wrapper.style.transform = "none";
+                return;
+            }
+            const xAxis = (window.innerWidth / 2 - x) / 40;
+            const yAxis = (window.innerHeight / 2 - y) / 40;
+            wrapper.style.transform = `rotateY(${xAxis}deg) rotateX(${-yAxis}deg)`;
+        }
+
+        window.addEventListener('mousemove', (e) => { applyTilt(e.pageX, e.pageY); });
+        window.addEventListener('touchmove', (e) => { if(e.touches.length > 0) applyTilt(e.touches[0].pageX, e.touches[0].pageY); });
+        window.addEventListener('mouseleave', () => { wrapper.style.transform = `rotateY(0deg) rotateX(0deg)`; });
+
+        // --- MATRIX RAIN ---
+        const matrixCanvas = document.getElementById('matrixCanvas'); const mCtx = matrixCanvas.getContext('2d');
+        let matrixColor = '#ff1e56';
+        let columns = Math.floor(window.innerWidth / 16);
+        let drops = Array(columns).fill(1);
+        function resizeMatrix() { matrixCanvas.width = window.innerWidth; matrixCanvas.height = window.innerHeight; }
+        window.addEventListener('resize', () => { resizeMatrix(); columns = Math.floor(window.innerWidth / 16); drops = Array(columns).fill(1); });
+        resizeMatrix();
+        const chars = "01010101ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789%@$"; const fontSize = 16;
+
+        function drawMatrix() {
+            mCtx.fillStyle = 'rgba(3, 1, 2, 0.08)'; mCtx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+            mCtx.fillStyle = matrixColor; mCtx.font = fontSize + 'px monospace';
+            for (let i = 0; i < drops.length; i++) {
+                const text = chars.charAt(Math.floor(Math.random() * chars.length));
+                mCtx.fillText(text, i * fontSize, drops[i] * fontSize);
+                if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) drops[i] = 0;
+                drops[i]++;
+            }
+        }
+        setInterval(drawMatrix, 33);
+
+        // --- WAVEFORM ---
+        const waveCanvas = document.getElementById('waveformCanvas'); const wCtx = waveCanvas.getContext('2d');
+        let waveActive = false; let waveColor = 'rgba(255, 30, 86, 0.45)'; let offset = 0;
+        function resizeWave() { waveCanvas.width = waveCanvas.parentElement.clientWidth; waveCanvas.height = 45; }
+        window.addEventListener('resize', resizeWave); resizeWave();
+        function drawWaveform() {
+            wCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height); wCtx.strokeStyle = waveColor; wCtx.lineWidth = 1.5; wCtx.beginPath();
+            let amp = waveActive ? 16 : 3; let freq = waveActive ? 0.04 : 0.02;
+            for (let x = 0; x < waveCanvas.width; x++) {
+                let y = waveCanvas.height / 2 + Math.sin(x * freq + offset) * amp * (Math.random() * 0.4 + 0.8);
+                if(x === 0) wCtx.moveTo(x, y); else wCtx.lineTo(x, y);
+            }
+            wCtx.stroke(); offset += waveActive ? 0.22 : 0.04; requestAnimationFrame(drawWaveform);
+        }
+        drawWaveform();
+
+        // --- AUDIO ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let hasInteracted = false;
+        const globalMP3 = new Audio(); globalMP3.src = 'connection_established.mp3'; globalMP3.preload = 'auto';
+        const megabootMP3 = new Audio(); megabootMP3.src = 'megabootscreen.mp3'; megabootMP3.preload = 'auto';
+        
+        const readingDataAudio = new Audio(); readingDataAudio.src = 'reading_data.mp3'; readingDataAudio.preload = 'auto';
+        const systemActivatedAudio = new Audio(); systemActivatedAudio.src = 'system_activated.mp3'; systemActivatedAudio.preload = 'auto';
+        const initAudio = new Audio(); initAudio.src = 'initialising.mp3'; initAudio.preload = 'auto'; // New Initialising Audio
+
+        function unlockAudioDevice() {
+            if (hasInteracted) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            globalMP3.play().then(() => { globalMP3.pause(); globalMP3.currentTime = 0; hasInteracted = true; }).catch(e => {});
+            readingDataAudio.play().then(() => { readingDataAudio.pause(); readingDataAudio.currentTime = 0; }).catch(e => {});
+            systemActivatedAudio.play().then(() => { systemActivatedAudio.pause(); systemActivatedAudio.currentTime = 0; }).catch(e => {});
+            initAudio.play().then(() => { initAudio.pause(); initAudio.currentTime = 0; }).catch(e => {});
+        }
+        window.addEventListener('click', unlockAudioDevice, { once: false });
+        window.addEventListener('touchstart', unlockAudioDevice, { once: false });
+
+        function playSound(freq, type, duration, vol) {
+            try {
+                let osc = audioCtx.createOscillator(); let gain = audioCtx.createGain();
+                osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime); gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+                osc.connect(gain); gain.connect(audioCtx.destination); osc.start(); osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        function playConnectionEstablishedAudio() {
+            try { globalMP3.currentTime = 0; globalMP3.volume = 0.85; globalMP3.play().catch(err => { const fallbackAudio = new Audio('connection_established.mp3'); fallbackAudio.volume = 0.85; fallbackAudio.play(); }); } catch(e) {}
+        }
+
+        function playMegabootAudio() {
+            try { megabootMP3.currentTime = 0; megabootMP3.volume = 0.85; megabootMP3.play().catch(err => { const fallbackAudio = new Audio('megabootscreen.mp3'); fallbackAudio.volume = 0.85; fallbackAudio.play(); }); } catch(e) {}
+        }
+
+        function stopMegabootAudio() { try { megabootMP3.pause(); megabootMP3.currentTime = 0; } catch(e) {} }
+
+        function triggerSystemReset() { playSound(150, 'sawtooth', 0.5, 0.25); location.reload(); }
+
+        function updateClock() { 
+            const now = new Date(); const timeString = now.toISOString().substring(11, 19) + " UTC";
+            document.getElementById('liveClock').textContent = timeString; 
+            if(document.getElementById('s4Clock')) document.getElementById('s4Clock').textContent = timeString;
+        }
+        setInterval(updateClock, 1000); updateClock();
+
+        const terminalLog = document.getElementById('terminalLog');
+        function printLogLine(msg, type = 'normal') {
+            const time = `[ ${new Date().toISOString().substring(17, 23)} ]`;
+            const line = document.createElement('div'); line.className = 'log-line';
+            let msgClass = 'log-message';
+            if(type === 'success') msgClass = 'log-message-highlight';
+            if(type === 'warning') msgClass = 'log-message-warning';
+            if(type === 'critical') msgClass = 'log-message-critical';
+            line.innerHTML = `<div class="log-timestamp" style="color: ${type==='critical' ? '#ff1e56' : ''}">${time}</div><div class="${msgClass}">${msg}</div>`;
+            terminalLog.appendChild(line);
+            terminalLog.scrollTop = terminalLog.scrollHeight;
+        }
+
+        // --- SCREEN 1 SCANNING ---
+        const hudTrigger = document.getElementById('hudTrigger');
+        const gatewayWindow = document.getElementById('gatewayWindow');
+        let isScanning = false;
+
+        hudTrigger.addEventListener('click', () => {
+            if (isScanning) return; isScanning = true;
+            unlockAudioDevice();
+            playSound(320, 'sine', 0.15, 0.35); terminalLog.innerHTML = ""; 
+
+            gatewayWindow.classList.add('scanning-active'); hudTrigger.classList.add('disabled');
+            document.getElementById('systemMode').textContent = "DEEP INTRUSION // ALGORITHMIC FEED";
+            document.getElementById('hudStatus').textContent = "SCANNING PHASE";
+            document.getElementById('hudSubText').textContent = "[ LAYER 1 OF 5 ]"; waveActive = true;
+
+            document.getElementById('node1').classList.add('bypassing'); document.getElementById('nodeStatus1').textContent = "INJECTING...";
+            document.getElementById('node2').classList.add('bypassing'); document.getElementById('nodeStatus2').textContent = "DEVENTING...";
+
+            let soundLoop = setInterval(() => { if(!waveActive) { clearInterval(soundLoop); return; } playSound(140 + Math.random() * 50, 'triangle', 0.15, 0.05); }, 180);
+
+            setTimeout(() => {
+                document.getElementById('hudStatus').textContent = "BIOMETRIC AUTH..."; document.getElementById('hudSubText').textContent = "[ LAYER 3 OF 5 ]";
+                playSound(480, 'sine', 0.08, 0.25); printLogLine("INJECTING // Pushing payload data arrays through open socket...");
+                document.getElementById('node1').className = 'server-node bypassed'; document.getElementById('nodeStatus1').textContent = "BYPASSED";
+                document.getElementById('node3').classList.add('bypassing'); document.getElementById('nodeStatus3').textContent = "REROUTING...";
+            }, 1200);
+
+            setTimeout(() => {
+                document.getElementById('hudSubText').textContent = "[ LAYER 5 OF 5 ]"; playSound(580, 'sine', 0.08, 0.25); 
+                printLogLine("DECRYPTING // Initializing multi-thread password decryption algorithms...");
+                document.getElementById('node2').className = 'server-node bypassed'; document.getElementById('nodeStatus2').textContent = "BYPASSED";
+                document.getElementById('node4').classList.add('bypassing'); document.getElementById('nodeStatus4').textContent = "CORRUPTING...";
+            }, 2500);
+
+            setTimeout(() => {
+                waveActive = false; gatewayWindow.classList.remove('scanning-active'); gatewayWindow.classList.add('success-state');
+                matrixColor = '#00ff66'; waveColor = 'rgba(0, 255, 102, 0.45)';
+                document.getElementById('hudStatus').textContent = "BYPASS COMPLETED"; document.getElementById('hudSubText').textContent = "✔ ACCESS GRANTED";
+                document.getElementById('node3').className = 'server-node bypassed'; document.getElementById('nodeStatus3').textContent = "BYPASSED";
+                document.getElementById('node4').className = 'server-node bypassed'; document.getElementById('nodeStatus4').textContent = "BYPASSED";
+                playSound(650, 'sine', 0.15, 0.25); setTimeout(() => playSound(950, 'sine', 0.35, 0.25), 100);
+                printLogLine("[OK] RAW OVERRIDE HANDSHAKE SUCCESSFULLY AUTHORIZED.", "success");
+
+                // ⚡ AUTO TRANSITION TO SCREEN 2
+                setTimeout(() => { autoGoToScreen2(); }, 1000);
+            }, 4200);
+        });
+
+        // --- AUTO TRANSITION FUNCTIONS ---
+        function autoGoToScreen2() {
+            if (autoTransitionInProgress) return;
+            autoTransitionInProgress = true;
+
+            gatewayWindow.classList.add('transitioning'); playSound(180, 'sawtooth', 0.4, 0.2);
+            setTimeout(() => {
+                gatewayWindow.classList.remove('transitioning'); gatewayWindow.classList.remove('success-state');
+
+                document.getElementById('screenGateway').classList.remove('active'); 
+                document.getElementById('screenCoreExplorer').classList.add('active');
+
+                gatewayWindow.style.borderColor = "var(--blue-glow)"; 
+                gatewayWindow.style.boxShadow = "0 15px 45px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 229, 255, 0.15)";
+                replaceWindowBeforeGlow('var(--blue-glow)');
+
+                document.getElementById('mainHeaderTitle').textContent = "ROOT_SYSTEM_DIRECTORY_EXPLORER.bin";
+                document.getElementById('mainHeaderTag').textContent = "CORRUPT_SU_ROOT"; 
+                document.getElementById('mainHeaderTag').style.color = "var(--blue-glow)"; 
+                document.getElementById('mainHeaderTag').style.borderColor = "var(--blue-dim)";
+
+                document.getElementById('systemMode').textContent = "SECURE DIRECTORY STACK compromised"; 
+                document.getElementById('systemMode').style.color = "var(--blue-glow)";
+                document.getElementById('pulseDotIndicator').style.backgroundColor = "var(--blue-glow)"; 
+                document.getElementById('nodeLabel').textContent = "ROOT: SYSTEM-ROOT@PIYUSH-CORE-01";
+
+                matrixColor = "#00e5ff"; waveColor = "rgba(0, 229, 255, 0.5)"; terminalLog.innerHTML = "";
+                autoTransitionInProgress = false;
+
+                startVaultDecryption();
+            }, 500);
+        }
+
+        function autoGoToScreen3() {
+            if (autoTransitionInProgress) return;
+            autoTransitionInProgress = true;
+
+            gatewayWindow.classList.add('transitioning'); playSound(120, 'square', 0.5, 0.3);
+            setTimeout(() => {
+                gatewayWindow.classList.remove('transitioning');
+
+                document.getElementById('screenCoreExplorer').classList.remove('active'); 
+                document.getElementById('screenMasterControl').classList.add('active');
+
+                gatewayWindow.classList.add('warning-state');
+                gatewayWindow.style.borderColor = "var(--orange-glow)";
+                replaceWindowBeforeGlow('var(--orange-glow)');
+
+                document.getElementById('mainHeaderTitle').textContent = "MASTER_CONTROL_PANEL.exe";
+                document.getElementById('mainHeaderTag').textContent = "ROOT_SHELL_ACTIVE"; 
+                document.getElementById('mainHeaderTag').style.color = "var(--orange-glow)"; 
+                document.getElementById('mainHeaderTag').style.borderColor = "var(--orange-dim)";
+
+                document.getElementById('systemMode').textContent = "CRITICAL: AWAITING FINAL EXECUTION"; 
+                document.getElementById('systemMode').style.color = "var(--orange-glow)";
+                document.getElementById('pulseDotIndicator').style.backgroundColor = "var(--orange-glow)";
+
+                matrixColor = "#ff8c00"; waveColor = "rgba(255, 140, 0, 0.5)"; terminalLog.innerHTML = "";
+                printLogLine("ACCESSING MASTER CONTROLS. WARNING: ACTIONS ARE IRREVERSIBLE.", "warning");
+                printLogLine("Awaiting operator instruction (Initiate Download / Wipe System)...", "normal");
+                autoTransitionInProgress = false;
+
+                // ⚡ AUTO-START EXTRACTION AFTER A DELAY
+                setTimeout(() => { startExtraction(); }, 1000);
+            }, 500);
+        }
+
+        function autoGoToScreen4() {
+            if (autoTransitionInProgress) return;
+            autoTransitionInProgress = true;
+
+            gatewayWindow.classList.add('transitioning'); playSound(320, 'sawtooth', 0.6, 0.25);
+            setTimeout(() => {
+                gatewayWindow.classList.remove('transitioning'); gatewayWindow.classList.remove('warning-state');
+
+                document.getElementById('standardWindowHeader').style.display = "none";
+                document.getElementById('standardStatusBar').style.display = "none";
+
+                isScreen4Active = true; wrapper.style.transform = "none";
+                document.getElementById('windowWrapper').classList.add('terminal-large-mode');
+                gatewayWindow.classList.add('terminal-active-mode');
+
+                document.getElementById('screenMasterControl').classList.remove('active'); 
+                document.getElementById('screenTerminalOverride').classList.add('active');
+
+                matrixColor = "#d81b60"; waveColor = "rgba(216, 27, 96, 0.5)"; terminalLog.innerHTML = "";
+                autoTransitionInProgress = false;
+
+                runAutoTerminalLogs();
+            }, 500);
+        }
+
+        // --- VIRTUAL FILES ---
+        const virtualFiles = {
+            sys_log: `[SYS CONFIG MANIFEST]\nSECURITY_STAGE: COMPROMISED\nENCRYPTION: AES_256_GCM (BYPASSED)\nSYSTEM_NODES: 4/4 COMPROMISED\nGATEWAY_ROUTE: TUNNEL OVERRIDE CLEARED.`,
+            core_users: `[CLEARANCE_USER_DATABASE]\nUSER: root_admin | HASH: $2a$12$N9qo8uLO... (DECRYPTED)\nUSER: system_mod | HASH: $2a$12$V7y9R0zP... (LOCKED)\nUSER: piyush_dev | HASH: $2a$12$Q4r0M2oK... (DECRYPTED)`,
+            override_seq: `[PAYLOAD_INJECTION_MAP]\nTARGET_SOCKET: /var/run/core_handshake.sock\nROUTE: 127.0.0.1 -> ROUTER_GATEWAY -> INTEL-STATION\nINJECT_BUFF: [0x50, 0x30, 0x49, 0x72]`
+        };
+
+        function loadVirtualFile(fileKey, clickedElement) {
+            playSound(420, 'sine', 0.05, 0.15);
+            document.querySelectorAll('.dir-item').forEach(el => el.classList.remove('active'));
+            if (clickedElement) clickedElement.classList.add('active');
+            const viewer = document.getElementById('fileViewerConsole'); viewer.textContent = "";
+            let fileContent = virtualFiles[fileKey]; let i = 0;
+            function typeText() { if (i < fileContent.length) { viewer.textContent += fileContent.charAt(i); i++; setTimeout(typeText, 4); } }
+            typeText(); printLogLine(`Reading sector block /dev/sda1 -> ${fileKey}.cfg`);
+        }
+
+        // --- AUTO DECRYPTION ---
+        function startVaultDecryption() {
+            const bar = document.getElementById('decryptionProgressBar'); const progressText = document.getElementById('decryptionProgressText');
+            const label = document.getElementById('liveDecryptionLabel'); let progress = 0; const hexPool = "0123456789ABCDEF!@#$%^&*";
+            
+            let decrypterLoop = setInterval(() => {
+                if (progress >= 100) {
+                    clearInterval(decrypterLoop);
+                    bar.style.width = "100%"; 
+                    progressText.textContent = "STATUS: COMPLETE"; 
+                    progressText.style.color = "var(--green-glow)";
+                    label.textContent = "KEY DESCRIPTOR: MASTER_SU_ROOT_VERIFIED_ACCESS"; 
+                    label.style.color = "var(--green-glow)";
+                    playSound(850, 'sine', 0.2, 0.25); 
+                    printLogLine("DECRYPTER VAULT HANDSHAKE BYPASS COMPLETE. MASTER KEYS EXTRACTED.", "success");
+                    
+                    // ⚡ AUTO TRANSITION TO SCREEN 3
+                    setTimeout(() => { autoGoToScreen3(); }, 1500);
+                    return;
+                }
+                progress += Math.floor(Math.random() * 8) + 2; if(progress > 100) progress = 100;
+                bar.style.width = progress + "%"; progressText.textContent = `STATUS: ${progress}%`;
+                let mockKey = ""; for(let k=0; k<16; k++) mockKey += hexPool.charAt(Math.floor(Math.random() * hexPool.length));
+                label.textContent = `DECRYPTING KEY: [${mockKey}]`; playSound(200 + Math.random() * 400, 'sine', 0.04, 0.05);
+            }, 300);
+        }
+
+        // --- MASTER CONTROL (EXTRACTION) ---
+        function startExtraction() {
+            document.getElementById('btnExtract').disabled = true; 
+            document.getElementById('btnWipe').disabled = true;
+            document.getElementById('extractStatusText').textContent = "DOWNLOADING ARCHIVES...";
+            document.getElementById('extractStatusText').style.color = "var(--green-glow)";
+            printLogLine("INITIALIZING SECURE DATA EXTRACTION...", "normal"); waveActive = true;
+            
+            let p1 = 0, p2 = 0, p3 = 0;
+            let extractLoop = setInterval(() => {
+                p1 += Math.random() * 9; p2 += Math.random() * 13; p3 += Math.random() * 7;
+                if(p1 > 100) p1 = 100; if(p2 > 100) p2 = 100; if(p3 > 100) p3 = 100;
+                document.getElementById('extractProg1').style.width = p1 + "%";
+                document.getElementById('extractProg2').style.width = p2 + "%";
+                document.getElementById('extractProg3').style.width = p3 + "%";
+                playSound(650 + Math.random() * 200, 'sine', 0.05, 0.05);
+
+                if(p1 === 100 && p2 === 100 && p3 === 100) {
+                    clearInterval(extractLoop); waveActive = false;
+                    document.getElementById('extractStatusText').textContent = "EXTRACTION 100% COMPLETE";
+                    printLogLine("SYSTEM DATA PACKETS SUCCESSFULLY DOWNLOADED TO LOCAL STACK.", "success");
+                    playSound(1050, 'sine', 0.5, 0.2);
+
+                    // ⚡ AUTO TRANSITION TO SCREEN 4
+                    setTimeout(() => { autoGoToScreen4(); }, 1500);
+                }
+            }, 100);
+        }
+
+        function startWipe() {
+            document.getElementById('btnExtract').disabled = true; 
+            document.getElementById('btnWipe').disabled = true;
+            printLogLine("SCORCHED EARTH PROTOCOL INITIATED.", "critical");
+            matrixColor = "#ff1e56"; waveColor = "rgba(255, 30, 86, 0.8)"; waveActive = true;
+            
+            let count = 5;
+            let wipeLoop = setInterval(() => {
+                if(count > 0) {
+                    printLogLine(`WIPING DATA CHANNELS IN... ${count}`, "critical");
+                    playSound(220, 'sawtooth', 0.2, 0.4);
+                    count--;
+                } else {
+                    clearInterval(wipeLoop); waveActive = false;
+                    printLogLine("SYSTEM COLD WIPE COMPLETE. ALL TRACES SCRUBBED.", "critical");
+                    document.body.style.animation = "glitchEffect 0.2s 5";
+                    setTimeout(() => { 
+                        document.body.innerHTML = "<h1 style='color:red; text-align:center; font-family:monospace; margin-top:45vh; text-shadow: 0 0 10px red;'>FATAL_ERROR: CONNECTION_TERMINATED_NODE_OFFLINE</h1>"; 
+                    }, 1500);
+                }
+            }, 1000);
+        }
+
+        // --- SCREEN 4 TERMINAL ---
+        const s4ExploitLines = [
+            { t: "[ 0.000000 ]", text: "Awaiting Override Connection Stream... Initializing Core System Pipeline.", cls: "color-ready" },
+            { t: "[ 0.007250 ]", text: "SPOOFING // Initializing raw socket connection to target node...", cls: "color-spoofing" },
+            { t: "[READY]", text: "Handshake session initialized with encryption layer.", cls: "color-ready" },
+            { t: "[ 0.245090 ]", text: "SCANNING // Mapping active mainframe network interfaces... Core proxy locked on <span style='color:#00e5ff'>192.168.42.109</span>", cls: "color-spoofing" },
+            { t: "[ 0.485684 ]", text: "INJECTING // Pushing payload data arrays through open socket segment...", cls: "color-injecting" },
+            { t: "[ 0.754844 ]", text: "DECRYPTING // Initializing multi-thread password decryption algorithms...", cls: "color-decrypting" },
+            { t: "[SUCCESS] MASTER ACCESS TOKEN DECRYPTED // HASH:", text: " <span style='color:#00e5ff; font-weight:bold;'>5F4DCC3B5AA565D61</span>", cls: "color-success-tag" },
+            { t: "[ 1.005276 ]", text: "CRACKING // Brute-force credentials module active... System handshake caught.", cls: "color-cracking" },
+            { t: "[ 1.234962 ]", text: "BYPASSING // Cleaning tracking log traces inside active directory... <span class='color-ready'>[CLEAN]</span>", cls: "color-spoofing" },
+            { t: "[ 1.472587 ]", text: "OVERCONNECT // Port forward established via node proxy... <span class='color-override'>OVERRIDE SEQUENCE STABLE.</span>", cls: "color-spoofing" }
+        ];
+
+        const s4Console = document.getElementById('screen4Console');
+        const s4Input = document.getElementById('shellInputField');
+
+        function addS4Line(timestamp, text, customClass) {
+            const line = document.createElement('div'); line.className = 'shell-line';
+            line.innerHTML = `<span class="shell-timestamp ${customClass}">${timestamp}</span> <span>${text}</span>`;
+            s4Console.appendChild(line); s4Console.scrollTop = s4Console.scrollHeight;
+        }
+
+        function runAutoTerminalLogs() {
+            s4Console.innerHTML = ""; waveActive = true; let lineIndex = 0;
+            function runSequence() {
+                if (lineIndex < s4ExploitLines.length) {
+                    const currentLine = s4ExploitLines[lineIndex];
+                    addS4Line(currentLine.t, currentLine.text, currentLine.cls);
+                    playSound(180 + Math.random() * 450, 'sine', 0.08, 0.08);
+                    lineIndex++; setTimeout(runSequence, 400 + Math.random() * 300);
+                } else {
+                    waveActive = false; playSound(820, 'sine', 0.3, 0.2);
+                    addS4Line("[SYSTEM_INFO]", "Type <span class='banner-highlight'>help</span> or click <span class='banner-highlight'>AUTO RUN</span> to launch compiling systems.", "color-ready");
+                }
+            }
+            runSequence();
+        }
+
+        s4Input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const cmdLine = s4Input.value.trim(); s4Input.value = "";
+                if (cmdLine === "") return;
+                addS4Line("root@kali:~#", cmdLine, "prompt-kali"); playSound(450, 'sine', 0.04, 0.15);
+                const parts = cmdLine.toLowerCase().split(' '); const primaryCmd = parts[0];
+                switch(primaryCmd) {
+                    case "help":
+                        addS4Line("SHELL", "Available Command Protocols:", "color-ready");
+                        addS4Line("  - help", "Displays current support system command tree.", "color-spoofing");
+                        addS4Line("  - sysinfo", "Reads mainframe CPU architecture & spoof status.", "color-spoofing");
+                        addS4Line("  - decrypt <user>", "Explores system clear list keys of a specified profile.", "color-spoofing");
+                        addS4Line("  - nodes", "Query active hardware state metrics.", "color-spoofing");
+                        addS4Line("  - matrix <color>", "Reconfigures code waterfall color (red, green, blue, pink, orange).", "color-spoofing");
+                        addS4Line("  - hypercore ui", "Launches master UI overlay console parameters.", "color-ready");
+                        addS4Line("  - clear", "Flushes active local frame terminal shell log database.", "color-spoofing");
+                        break;
+                    case "sysinfo":
+                        addS4Line("SYS_INFO", "OS Platform: Kali Linux 2026.2", "color-spoofing");
+                        addS4Line("SYS_INFO", "Mainframe Target: PIYUSH-CORE-01", "color-spoofing");
+                        addS4Line("SYS_INFO", "Active Port: 443 -> Socket Tunnel Verified", "color-spoofing");
+                        addS4Line("SYS_INFO", "CPU Spoof: active thread count [16]", "color-spoofing");
+                        break;
+                    case "nodes":
+                        addS4Line("NODES", "NODE_PROXY_01 : BYPASSED [100% OK]", "color-ready");
+                        addS4Line("NODES", "NODE_RELAY_02 : BYPASSED [100% OK]", "color-ready");
+                        addS4Line("NODES", "DNS_BYPASS_03 : BYPASSED [100% OK]", "color-ready");
+                        addS4Line("NODES", "CORE_STACK_04 : BYPASSED [100% OK]", "color-ready");
+                        break;
+                    case "clear": case "cls":
+                        s4Console.innerHTML = ""; addS4Line("[SYSTEM_MSG]", "Console screen successfully flushed.", "color-ready"); break;
+                    case "decrypt":
+                        const user = parts[1] || "root_admin";
+                        addS4Line("CRACKING", `Attacking user entry: ${user}...`, "color-cracking");
+                        setTimeout(() => { playSound(900, 'sine', 0.2, 0.2); addS4Line("SUCCESS", `Decrypted HASH for ${user}: $2a$12$N9qo8uLO...`, "color-success-tag"); }, 800);
+                        break;
+                    case "matrix":
+                        const color = parts[1];
+                        if (["red", "green", "blue", "pink", "orange"].includes(color)) {
+                            if(color === "red") matrixColor = "#ff1e56";
+                            if(color === "green") matrixColor = "#00ff66";
+                            if(color === "blue") matrixColor = "#00e5ff";
+                            if(color === "pink") matrixColor = "#d81b60";
+                            if(color === "orange") matrixColor = "#ff8c00";
+                            addS4Line("MATRIX", `Canvas code trace color configured to: ${color.toUpperCase()}`, "color-ready");
+                        } else {
+                            addS4Line("ERROR", "Invalid color choice. Use: red, green, blue, pink, orange.", "color-critical");
+                        }
+                        break;
+                    case "hypercore":
+                        if (parts[1] === "ui") { triggerMegaBootProcess(); } 
+                        else { addS4Line("[ERROR]", "Incomplete pipeline argument. Try 'hypercore ui'.", "color-critical"); }
+                        break;
+                    default:
+                        setTimeout(() => { playSound(180, 'sawtooth', 0.3, 0.3); addS4Line("[ERROR]", `Command '${cmdLine}' unknown. Enter 'help' for documentation.`, "color-critical"); }, 300);
+                }
+            }
+        });
+
+        // --- MEGA BOOT ---
+        let isMegaBootActive = false;
+        let telemetryRunning = false;
+        
+        function triggerMegaBootProcess() {
+            if (isMegaBootActive) return; isMegaBootActive = true; unlockAudioDevice();
+            playMegabootAudio();
+            playSound(120, 'sawtooth', 0.8, 0.25);
+            setTimeout(() => { playSound(350, 'square', 0.5, 0.2); playSound(650, 'sine', 0.4, 0.3); }, 150);
+
+            document.getElementById('terminalMainInterface').style.display = "none";
+            const bootView = document.getElementById('megaBootProcessView'); bootView.classList.add('active');
+
+            gatewayWindow.style.background = "var(--cyber-bg)"; gatewayWindow.style.borderColor = "var(--cyber-border)";
+            gatewayWindow.style.boxShadow = "0 20px 60px rgba(13, 148, 136, 0.35)"; matrixColor = "#14b8a6"; waveColor = "rgba(20, 184, 166, 0.55)";
+
+            startCompilingLogic(); startTelemetryGraph();
+        }
+
+        const bootModules = [
+            "sys/firmware/efi/efivars", "usr/bin/python3.10-enclave", "opt/raw/bin/hypercore_gate",
+            "lib/modules/6.1.0-raw-kernel", "sys/net/tun/tunnel_device", "sys/hardware/security/enclave_core",
+            "var/log/sys_audit_manifest", "usr/lib/ssl/certs/ca-certificates", "etc/security/limits.conf",
+            "bin/bash-sealed-enclave", "usr/share/zoneinfo/UTC", "boot/vmlinuz-sealed-core",
+            "lib64/ld-linux-x86-64.so", "var/run/dbus/system_bus_socket", "sys/devices/virtual/dmi/id",
+            "sys/fs/cgroup/unified_hierarchy", "opt/intel/sgx/enclave_loader", "etc/pam.d/common-auth"
+        ];
+
+        function getRandomHex() { return "0x" + Math.floor(Math.random() * 0xFFFFFFFF).toString(16).toUpperCase(); }
+
+        function startCompilingLogic() {
+            const consoleBox = document.getElementById('compilingRegistryConsole');
+            const pctText = document.getElementById('compilingPercentageValue'); let pct = 0; let intervalTime = 60;
+            
+            function printCompilerLine() {
+                if (!isMegaBootActive) return;
+                const isAlloc = Math.random() > 0.4;
+                const row = document.createElement('div'); row.className = 'compiler-row';
+                if (isAlloc) {
+                    const hex1 = getRandomHex(); const hex2 = getRandomHex();
+                    row.innerHTML = `<span class="row-tag">[ALLOC]</span><span class="row-desc">Bound memory stack segment at <span style="color:var(--cyber-text)">${hex1}</span> -> referenced to physical enclave <span style="color:#ff1e56">${hex2}</span></span><span class="row-status">OK</span>`;
+                } else {
+                    const randomMod = bootModules[Math.floor(Math.random() * bootModules.length)];
+                    const sizeBytes = Math.floor(Math.random() * 8000) + 200;
+                    row.innerHTML = `<span class="row-tag" style="color:#00e5ff">[COMPILE]</span><span class="row-desc">Binding and verifying dependency <span style="color:#8ab4f8">${randomMod}</span> (${sizeBytes} Bytes) ...</span><span class="row-status" style="color:#0df766">VERIFIED</span>`;
+                }
+                consoleBox.appendChild(row); consoleBox.scrollTop = consoleBox.scrollHeight;
+                if (consoleBox.children.length > 250) consoleBox.removeChild(consoleBox.firstChild);
+                if (pct < 100) {
+                    pct += Math.random() > 0.8 ? 1 : 0.4; if (pct > 100) pct = 100;
+                    pctText.textContent = `${Math.floor(pct)}% COMPLETE`;
+                    if (Math.floor(pct) % 5 === 0) playSound(300 + (pct * 4), 'sine', 0.04, 0.05);
+                } else {
+                    pctText.textContent = "100% COMPILED // SECURE"; pctText.style.color = "#0df766";
+                    stopMegabootAudio();
+                    setTimeout(() => { transitionToScreen6(); }, 1800);
+                    return;
+                }
+                setTimeout(printCompilerLine, intervalTime + (Math.random() * 40));
+            }
+            printCompilerLine();
+        }
+
+        function startTelemetryGraph() {
+            if (telemetryRunning) return; telemetryRunning = true;
+            const canvas = document.getElementById('telemetryCanvas'); const ctx = canvas.getContext('2d');
+            function fitCanvas() { canvas.width = canvas.parentElement.clientWidth; canvas.height = 60; }
+            window.addEventListener('resize', fitCanvas); fitCanvas();
+            let dataPoints = Array(50).fill(30);
+            function drawTelemetryLoop() {
+                if (!isMegaBootActive) { telemetryRunning = false; return; }
+                dataPoints.shift(); const lastVal = dataPoints[dataPoints.length - 1];
+                let newVal = lastVal + (Math.random() * 16 - 8); if (newVal < 10) newVal = 10; if (newVal > 50) newVal = 50;
+                dataPoints.push(newVal);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = "rgba(20, 184, 166, 0.08)"; ctx.lineWidth = 1;
+                for (let i = 10; i < canvas.height; i += 15) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke(); }
+                ctx.strokeStyle = "#14b8a6"; ctx.lineWidth = 2.5; ctx.shadowColor = "#0d9488"; ctx.shadowBlur = 10; ctx.beginPath();
+                const sliceWidth = canvas.width / (dataPoints.length - 1);
+                for (let i = 0; i < dataPoints.length; i++) {
+                    const x = i * sliceWidth; const y = canvas.height - dataPoints[i];
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke(); ctx.shadowBlur = 0;
+                setTimeout(drawTelemetryLoop, 100);
+            }
+            drawTelemetryLoop();
+        }
+
+        function transitionToScreen6() {
+            isMegaBootActive = false; gatewayWindow.classList.add('transitioning'); playSound(480, 'sine', 0.5, 0.25);
+            replaceWindowBeforeGlow('var(--cyber-border)');
+            setTimeout(() => {
+                gatewayWindow.classList.remove('transitioning');
+                document.getElementById('screenTerminalOverride').classList.remove('active');
+                document.getElementById('screenSecureConnection').classList.add('active');
+                gatewayWindow.style.background = "var(--cyber-bg)"; gatewayWindow.style.borderColor = "var(--cyber-border)";
+                gatewayWindow.style.boxShadow = "0 25px 65px rgba(20, 184, 166, 0.35)"; matrixColor = "#14b8a6"; waveColor = "rgba(20, 184, 166, 0.6)";
+                printLogLine("SECURE TRANSMISSION SECURED: TARGET INTERACTION SUCCESSFUL.", "success");
+                startTypewriterTitle();
+            }, 600);
+        }
+
+        function startTypewriterTitle() {
+            const titleElement = document.getElementById('connEstablishedTitle'); const message = "Connection Established";
+            titleElement.textContent = ""; let charIndex = 0;
+            setTimeout(() => { playConnectionEstablishedAudio(); }, 600);
+            function typeNextChar() {
+                if (charIndex < message.length) {
+                    titleElement.textContent += message.charAt(charIndex); charIndex++;
+                    if (charIndex % 2 === 0) playSound(1100, 'sine', 0.03, 0.03);
+                    setTimeout(typeNextChar, 75);
+                } else { 
+                    playSound(1300, 'sine', 0.15, 0.1); 
+                    setTimeout(() => { autoGoToScreen7(); }, 2500); 
+                }
+            }
+            typeNextChar();
+        }
+
+        function autoGoToScreen7() {
+            if(autoTransitionInProgress) return;
+            autoTransitionInProgress = true;
+            
+            gatewayWindow.classList.add('transitioning'); playSound(300, 'sawtooth', 0.4, 0.2);
+
+            setTimeout(() => {
+                gatewayWindow.classList.remove('transitioning');
+                document.getElementById('screenSecureConnection').classList.remove('active');
+                document.getElementById('screenReadingData').classList.add('active');
+                
+                gatewayWindow.style.borderColor = "#0df766";
+                gatewayWindow.style.boxShadow = "0 20px 60px rgba(13, 247, 102, 0.35)";
+                replaceWindowBeforeGlow('#0df766');
+                matrixColor = "#0df766"; waveColor = "rgba(13, 247, 102, 0.6)";
+                
+                autoTransitionInProgress = false;
+                startReadingDataProgress();
+            }, 500);
+        }
+
+        function startReadingDataProgress() {
+            let progress = 0;
+            const fill = document.getElementById('rdProgressFill');
+            const speedCounter = document.getElementById('rdSpeedCounter');
+            const hexStream = document.getElementById('rdHexStream');
+            const hexChars = "0123456789ABCDEF";
+            
+            let rdInterval = setInterval(() => {
+                progress += Math.random() * 3 + 0.5;
+                speedCounter.textContent = (Math.random() * 4 + 1.2).toFixed(2) + " GB/s";
+                
+                let hexStr = "";
+                for(let i=0; i<6; i++) {
+                    hexStr += "0x" + hexChars[Math.floor(Math.random()*16)] + hexChars[Math.floor(Math.random()*16)] + hexChars[Math.floor(Math.random()*16)] + " ";
+                }
+                hexStream.textContent = hexStr;
+
+                if(progress >= 100) {
+                    progress = 100;
+                    fill.style.width = '100%'; speedCounter.textContent = "DONE.";
+                    clearInterval(rdInterval);
+                    try { readingDataAudio.volume = 0.9; readingDataAudio.play().catch(e=>{}); } catch(e){}
+                    setTimeout(() => { autoGoToScreen8(); }, 1800);
+                } else {
+                    fill.style.width = progress + '%';
+                    if(Math.random() > 0.5) playSound(800 + Math.random()*300, 'square', 0.03, 0.05);
+                }
+            }, 80);
+        }
+
+        function autoGoToScreen8() {
+            if(autoTransitionInProgress) return;
+            autoTransitionInProgress = true;
+            
+            gatewayWindow.classList.add('transitioning'); playSound(200, 'sawtooth', 0.5, 0.3);
+
+            setTimeout(() => {
+                gatewayWindow.classList.remove('transitioning');
+                document.getElementById('screenReadingData').classList.remove('active');
+                document.getElementById('screenSystemActivated').classList.add('active');
+                
+                try { systemActivatedAudio.volume = 1.0; systemActivatedAudio.play().catch(e=>{}); } catch(e){}
+
+                playSound(300, 'sawtooth', 0.2, 0.4);
+                setTimeout(() => playSound(600, 'square', 0.2, 0.5), 200);
+                setTimeout(() => playSound(1200, 'sine', 0.6, 0.6), 400);
+                
+                document.getElementById('windowWrapper').style.animation = "glitchEffect 0.3s 2";
+                autoTransitionInProgress = false;
+
+                // ⚡ SECRETE HOOK: Transition to Admin Setup Screen (Screen 9) after 4s
+                setTimeout(() => { autoGoToScreen9(); }, 4000);
+
+            }, 500);
+        }
+
+        // =========================================================================
+        // NEW ADVANCED JAVASCRIPT FOR SCREENS 9, 10 AND 11 (FACE RECOGNITION + HASH)
+        // =========================================================================
+
+        let uploadedPhotoURL = null;
+        let globalAdminName = "PIYUSH"; // Default if skipped
+
+        // ✅ Load face-api.js models (only once)
+        async function loadFaceApiModels() {
+            if (faceApiModelsLoaded) return;
+            const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+            faceApiModelsLoaded = true;
+        }
+
+        function autoGoToScreen9() {
+            if(autoTransitionInProgress) return;
+            autoTransitionInProgress = true;
+            
+            gatewayWindow.classList.add('transitioning'); playSound(250, 'square', 0.3, 0.2);
+
+            setTimeout(() => {
+                gatewayWindow.classList.remove('transitioning');
+                
+                document.getElementById('screenSystemActivated').classList.remove('active');
+                document.getElementById('screenAdminSetup').classList.add('active');
+                
+                // Switch window style slightly
+                document.getElementById('standardWindowHeader').style.display = "flex";
+                document.getElementById('standardStatusBar').style.display = "flex";
+                document.getElementById('systemMode').textContent = "ADMIN REGISTRATION PROTOCOL";
+                
+                autoTransitionInProgress = false;
+            }, 500);
+        }
+
+        // ✅ Updated previewUpload: stores SHA-256 hash and face descriptor
+        async function previewUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Generate SHA-256 hash for import token matching
+            const buffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            uploadedPhotoHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const thumb = document.getElementById('previewThumb');
+                thumb.src = e.target.result;
+                thumb.style.display = "block";
+                document.getElementById('uploadInstructionText').style.display = "none";
+                playSound(800, 'sine', 0.1, 0.2);
+
+                // Extract face descriptor for live camera recognition
+                try {
+                    await loadFaceApiModels();
+                    const img = await faceapi.bufferToImage(file);
+                    const detection = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+                                                     .withFaceLandmarks()
+                                                     .withFaceDescriptor();
+                    if (detection) {
+                        registeredFaceDescriptor = detection.descriptor;
+                    } else {
+                        alert('No face detected in registration image. Please upload a clear face photo.');
+                        registeredFaceDescriptor = null;
+                    }
+                } catch (err) {
+                    console.error('Face extraction failed:', err);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function showWarningPopup() {
+            document.getElementById('warningOverlay').style.display = 'flex';
+            playSound(150, 'sawtooth', 0.5, 0.5);
+            setTimeout(() => playSound(100, 'square', 0.5, 0.5), 100);
+            setTimeout(() => { document.getElementById('warningOverlay').style.display = 'none'; }, 2500);
+        }
+
+        function submitAdmin() {
+            const nameInput = document.getElementById('adminNameInput').value.trim();
+            const passInput = document.getElementById('adminPassInput').value.trim();
+            
+            // Validation check (Warning if empty)
+            if (!nameInput || !passInput || !uploadedPhotoHash) {
+                showWarningPopup();
+                return;
+            }
+
+            globalAdminName = nameInput.toUpperCase();
+            
+            // Show Initialising Overlay and Play Sound
+            document.getElementById('scanOverlayText').style.display = "block";
+            try { initAudio.volume = 1.0; initAudio.play().catch(e=>{}); } catch(e){}
+            
+            // Glitch visual and wait for server mock process
+            playSound(400, 'sawtooth', 0.5, 0.3);
+            setTimeout(() => { playSound(900, 'sine', 0.2, 0.4); }, 500);
+            
+            // Transition to Screen 10 after simulated 3 second delay
+            setTimeout(() => { autoGoToScreen10(); }, 3000);
+        }
+
+        function autoGoToScreen10() {
+            if(autoTransitionInProgress) return;
+            autoTransitionInProgress = true;
+            
+            gatewayWindow.classList.add('transitioning'); playSound(150, 'sawtooth', 0.4, 0.2);
+
+            setTimeout(() => {
+                gatewayWindow.classList.remove('transitioning');
+                
+                document.getElementById('screenAdminSetup').classList.remove('active');
+                document.getElementById('screenIdentityCenter').classList.add('active');
+                
+                document.getElementById('systemMode').textContent = "IDENTITY ANALYSIS CENTER // STANDBY";
+                
+                autoTransitionInProgress = false;
+            }, 500);
+        }
+
+        let liveVideoStream = null;
+
+        // ✅ Updated startFaceScan: live camera with face recognition
+        async function startFaceScan() {
+            if (!registeredFaceDescriptor) {
+                alert('No registered face found. Please register first.');
+                return;
+            }
+            await loadFaceApiModels();
+
+            const videoEl = document.getElementById('iacLiveVideo');
+            const photoImg = document.getElementById('iacPhotoImg');
+            const avatar = document.getElementById('iacAvatar');
+            const frame = document.getElementById('iacPhotoFrame');
+
+            // UI prepare
+            avatar.style.display = "none";
+            photoImg.style.display = "none";
+            document.getElementById('iacPhotoOverlay').style.display = "none";
+            videoEl.style.display = "block";
+
+            // Disable buttons
+            document.getElementById('btnScanFace').disabled = true;
+            document.getElementById('btnImportToken').disabled = true;
+
+            // Camera start
+            try {
+                liveVideoStream = await navigator.mediaDevices.getUserMedia({ video: {} });
+                videoEl.srcObject = liveVideoStream;
+                videoEl.play();
+            } catch(e) {
+                alert('Camera access denied.');
+                resetFaceScanUI();
+                return;
+            }
+
+            // Scanning animation
+            playSound(700, 'sine', 0.1, 0.3);
+            document.getElementById('iacScanline').style.display = "block";
+            document.getElementById('iacScanline').style.animation = "scan-laser 1s linear infinite";
+            frame.classList.add('frame-popped');
+
+            // Wait for video to be ready
+            videoEl.addEventListener('playing', async () => {
+                // Allow camera to adjust
+                await new Promise(r => setTimeout(r, 2000));
+
+                const canvas = faceapi.createCanvasFromMedia(videoEl);
+                const displaySize = { width: videoEl.videoWidth, height: videoEl.videoHeight };
+                faceapi.matchDimensions(canvas, displaySize);
+
+                const detections = await faceapi.detectAllFaces(videoEl, new faceapi.TinyFaceDetectorOptions())
+                                               .withFaceLandmarks()
+                                               .withFaceDescriptors();
+
+                if (detections.length === 0) {
+                    alert('No face detected. Try again.');
+                    resetFaceScanUI();
+                    return;
+                }
+
+                // Compare with registered descriptor
+                const labeledDescriptor = new faceapi.LabeledFaceDescriptors('registered', [registeredFaceDescriptor]);
+                const faceMatcher = new faceapi.FaceMatcher(labeledDescriptor, 0.6);
+                const bestMatch = faceMatcher.findBestMatch(detections[0].descriptor);
+
+                if (bestMatch.label === 'registered') {
+                    // ✅ Access granted
+                    clearScanAnimation();
+                    proceedAfterSuccessfulScan();
+                } else {
+                    // ❌ Access denied
+                    alert('Face not recognized. Access denied.');
+                    resetFaceScanUI();
+                }
+            }, { once: true });
+        }
+
+        function resetFaceScanUI() {
+            if (liveVideoStream) {
+                liveVideoStream.getTracks().forEach(track => track.stop());
+            }
+            document.getElementById('iacLiveVideo').style.display = 'none';
+            document.getElementById('iacAvatar').style.display = 'block';
+            document.getElementById('iacPhotoOverlay').style.display = 'block';
+            document.getElementById('iacScanline').style.display = 'none';
+            document.getElementById('iacPhotoFrame').classList.remove('frame-popped');
+            document.getElementById('btnScanFace').disabled = false;
+            document.getElementById('btnImportToken').disabled = false;
+        }
+
+        function clearScanAnimation() {
+            document.getElementById('iacScanline').style.display = 'none';
+            document.getElementById('iacPhotoFrame').classList.remove('frame-popped');
+            if (liveVideoStream) {
+                liveVideoStream.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        function proceedAfterSuccessfulScan() {
+            document.getElementById('panelSecId').textContent = "SEC-RECS";
+            document.getElementById('panelClassId').textContent = "CLASS_A";
+            document.getElementById('iacPanelAwaiting').style.display = "none";
+            document.getElementById('iacPanelVerified').style.display = "flex";
+            document.getElementById('btnAwaitingLock').style.display = "none";
+
+            typewriterEffect('typeAdminName', `SYSTEM ADMIN: ${globalAdminName}`, 40, () => {
+                typewriterEffect('typeAdminRole', `CHIEF INFORMATION OFFICER (CIO)`, 25, () => {
+                    typewriterEffect('typeAdminDiv', `KEMENTERIAN RAW CYBER SECURITY DIVISION INDIA`, 20, () => {
+                        playSound(950, 'sine', 0.4, 0.4);
+                        setTimeout(glitchToMasterCommand, 2500);
+                    });
+                });
+            });
+        }
+
+        // ✅ Updated verifyImportedToken: SHA-256 hash matching
+        async function verifyImportedToken(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+
+            // Generate hash of imported file
+            const buffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+            if (hashHex !== uploadedPhotoHash) {
+                // ❌ ACCESS DENIED
+                document.getElementById('warningOverlay').style.display = 'flex';
+                playSound(150, 'sawtooth', 0.5, 0.5);
+                setTimeout(() => {
+                    document.getElementById('warningOverlay').style.display = 'none';
+                }, 2500);
+
+                // Re-enable buttons
+                document.getElementById('btnScanFace').disabled = false;
+                document.getElementById('btnImportToken').disabled = false;
+                document.getElementById('btnImportToken').style.opacity = '1';
+                // Reset UI
+                document.getElementById('iacAvatar').style.display = "block";
+                document.getElementById('iacPhotoImg').style.display = "none";
+                document.getElementById('iacLiveVideo').style.display = "none";
+                document.getElementById('iacPhotoOverlay').style.display = "block";
+                document.getElementById('iacPanelAwaiting').style.display = "flex";
+                document.getElementById('iacPanelVerified').style.display = "none";
+                document.getElementById('btnAwaitingLock').style.display = "block";
+                document.getElementById('iacScanline').style.display = "none";
+                document.getElementById('iacPhotoFrame').classList.remove('frame-popped');
+                return;
+            }
+
+            // ✅ Match successful – proceed with original animation
+            document.getElementById('btnScanFace').disabled = true;
+            document.getElementById('btnImportToken').disabled = true;
+            document.getElementById('btnImportToken').style.opacity = '0.5';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const photoImg = document.getElementById('iacPhotoImg');
+                photoImg.src = e.target.result;
+                photoImg.style.display = "block";
+                document.getElementById('iacAvatar').style.display = "none";
+                document.getElementById('iacPhotoOverlay').style.display = "none";
+                document.getElementById('iacLiveVideo').style.display = "none";
+
+                const frame = document.getElementById('iacPhotoFrame');
+                frame.classList.add('frame-popped');
+                document.getElementById('iacScanline').style.display = "block";
+                document.getElementById('iacScanline').style.animation = "scan-laser 1.2s linear infinite";
+
+                playSound(600, 'sine', 0.1, 0.3);
+                let sLoop = setInterval(() => { playSound(1000 + Math.random()*100, 'square', 0.05, 0.1); }, 200);
+
+                setTimeout(() => {
+                    clearInterval(sLoop);
+                    playSound(1500, 'sine', 0.5, 0.3);
+                    document.getElementById('iacScanline').style.display = "none";
+                    frame.classList.remove('frame-popped');
+
+                    document.getElementById('panelSecId').textContent = "SEC-RECS";
+                    document.getElementById('panelClassId').textContent = "CLASS_A";
+
+                    document.getElementById('iacPanelAwaiting').style.display = "none";
+                    document.getElementById('iacPanelVerified').style.display = "flex";
+                    document.getElementById('btnAwaitingLock').style.display = "none";
+
+                    typewriterEffect('typeAdminName', `SYSTEM ADMIN: ${globalAdminName}`, 40, () => {
+                        typewriterEffect('typeAdminRole', `CHIEF INFORMATION OFFICER (CIO)`, 25, () => {
+                            typewriterEffect('typeAdminDiv', `KEMENTERIAN RAW CYBER SECURITY DIVISION INDIA`, 20, () => {
+                                playSound(950, 'sine', 0.4, 0.4);
+                                setTimeout(glitchToMasterCommand, 2500);
+                            });
+                        });
+                    });
+                }, 4000);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function glitchToMasterCommand() {
+            gatewayWindow.classList.add('transitioning'); 
+            document.body.style.animation = "glitchEffect 0.2s 5";
+            playSound(200, 'sawtooth', 0.5, 0.4);
+            
+            setTimeout(() => {
+                gatewayWindow.classList.remove('transitioning');
+                document.body.style.animation = "none";
+                
+                document.getElementById('screenIdentityCenter').classList.remove('active');
+                document.getElementById('screenFinalMaster').classList.add('active');
+
+                // Switch to Red RAW Command theme
+                gatewayWindow.style.borderColor = "#ff1e56";
+                gatewayWindow.style.boxShadow = "0 20px 60px rgba(255, 30, 86, 0.35)";
+                replaceWindowBeforeGlow('#ff1e56');
+                matrixColor = "#ff1e56"; waveColor = "rgba(255, 30, 86, 0.6)";
+                document.getElementById('pulseDotIndicator').style.backgroundColor = "#ff1e56";
+                document.getElementById('systemMode').textContent = "MASTER COMMAND CENTER // ONLINE";
+                document.getElementById('systemMode').style.color = "#ff1e56";
+
+                playSound(1500, 'sine', 1, 0.5);
+                setTimeout(() => playSound(800, 'square', 0.8, 0.3), 200);
+            }, 800);
+        }
+
+        function typewriterEffect(elementId, text, speed, callback) {
+            let i = 0;
+            let el = document.getElementById(elementId);
+            el.innerHTML = '';
+            function type() {
+                if (i < text.length) {
+                    el.innerHTML += text.charAt(i);
+                    if(Math.random() > 0.3) playSound(1800, 'square', 0.02, 0.05);
+                    i++;
+                    setTimeout(type, speed);
+                } else if (callback) {
+                    setTimeout(callback, 200);
+                }
+            }
+            type();
+        }
+
+        // --- UTILS ---
+        let injectedRuleIndex = -1;
+        function replaceWindowBeforeGlow(color) {
+            if (injectedRuleIndex >= 0) { try { document.styleSheets[0].deleteRule(injectedRuleIndex); } catch(e) {} }
+            injectedRuleIndex = document.styleSheets[0].insertRule(`.window::before { background: linear-gradient(90deg, transparent 20%, ${color} 50%, transparent 80%) !important; }`, 0);
+        }
+    </script>
+</body>
+</html>
